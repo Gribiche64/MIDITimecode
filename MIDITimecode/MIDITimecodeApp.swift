@@ -7,11 +7,10 @@ struct MIDITimecodeApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .frame(minWidth: 480, idealWidth: 520, maxWidth: 600,
-                       minHeight: 140, idealHeight: 160, maxHeight: 200)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.black)
         }
         .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-        .defaultSize(width: 520, height: 160)
+        .defaultSize(width: 540, height: 190)
     }
 }

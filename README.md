@@ -1,15 +1,16 @@
 # MIDITimecode
 
-A macOS app that displays MIDI Timecode (MTC) in a floating, always-on-top window with a nixie/valve tube aesthetic. Useful as a timecode reference display during music production, post-production, or live performance.
+A macOS app that displays MIDI Timecode (MTC) with a nixie/valve tube aesthetic. Useful as a timecode reference display during music production, post-production, or live performance.
 
 ## Features
 
 - Receives MIDI Timecode (MTC) quarter-frame messages from any connected MIDI source
 - Displays HH:MM:SS:FF in a glowing valve tube style
 - 6 tube color themes: Blue, Cyan, Green, Orange, Purple, Rainbow
-- Floating always-on-top window — stays visible over your DAW
+- Optional always-on-top mode (pin toggle in settings bar)
+- Resizable window with locked aspect ratio — digits scale to fill
 - Hidden title bar, movable by clicking anywhere on the window
-- Auto-detects connected MIDI devices
+- Auto-detects connected MIDI devices with rescan option
 - Displays detected frame rate (24, 25, 29.97 DF, 30 fps)
 
 ## Requirements
@@ -38,10 +39,11 @@ xcodebuild -project MIDITimecode.xcodeproj -scheme MIDITimecode -configuration R
 
 1. Launch MIDITimecode
 2. Connect a MIDI device that sends MTC (or configure your DAW to output MTC)
-3. Select the MIDI source from the dropdown at the bottom of the window
+3. Select the MIDI source from the dropdown in the settings bar
 4. Press play in your DAW — the timecode display updates in real time
-5. Change the tube color from the color picker dropdown
-6. Double-click the window to rescan for MIDI devices
+5. Change the tube color from the Color dropdown
+6. Toggle the pin icon to keep the window always on top
+7. Resize the window by dragging any edge — aspect ratio is locked
 
 ## Dependencies
 

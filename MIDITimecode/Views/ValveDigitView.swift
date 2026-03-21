@@ -10,43 +10,47 @@ struct ValveDigitView: View {
     }
 
     var body: some View {
-        ZStack {
-            // Tube body
-            RoundedRectangle(cornerRadius: 8)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(white: 0.15),
-                            Color(white: 0.08),
-                            Color(white: 0.12)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
+        GeometryReader { geo in
+            let fontSize = geo.size.height * 0.65
+
+            ZStack {
+                // Tube body
+                RoundedRectangle(cornerRadius: geo.size.width * 0.12)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(white: 0.15),
+                                Color(white: 0.08),
+                                Color(white: 0.12)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
                     )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(Color(white: 0.25), lineWidth: 1)
-                )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: geo.size.width * 0.12)
+                            .stroke(Color(white: 0.25), lineWidth: 1)
+                    )
 
-            // Glow bloom behind the digit
-            Text(digit)
-                .font(.system(size: 48, weight: .light, design: .monospaced))
-                .foregroundStyle(colorSet.glow)
-                .blur(radius: 12)
+                // Glow bloom behind the digit
+                Text(digit)
+                    .font(.system(size: fontSize, weight: .light, design: .monospaced))
+                    .foregroundStyle(colorSet.glow)
+                    .blur(radius: fontSize * 0.2)
 
-            // Secondary halo
-            Text(digit)
-                .font(.system(size: 48, weight: .light, design: .monospaced))
-                .foregroundStyle(colorSet.secondary)
-                .blur(radius: 4)
+                // Secondary halo
+                Text(digit)
+                    .font(.system(size: fontSize, weight: .light, design: .monospaced))
+                    .foregroundStyle(colorSet.secondary)
+                    .blur(radius: fontSize * 0.06)
 
-            // Primary digit
-            Text(digit)
-                .font(.system(size: 48, weight: .light, design: .monospaced))
-                .foregroundStyle(colorSet.primary)
-                .shadow(color: colorSet.glow, radius: 8)
+                // Primary digit
+                Text(digit)
+                    .font(.system(size: fontSize, weight: .light, design: .monospaced))
+                    .foregroundStyle(colorSet.primary)
+                    .shadow(color: colorSet.glow, radius: fontSize * 0.12)
+            }
         }
-        .frame(width: 44, height: 72)
+        .aspectRatio(0.62, contentMode: .fit)
     }
 }

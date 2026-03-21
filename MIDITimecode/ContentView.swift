@@ -4,113 +4,132 @@ struct ContentView: View {
     @StateObject private var midiManager = MIDIManager()
 
     var body: some View {
-        ZStack {
-            // Dark gradient background
-            LinearGradient(
-                colors: [Color(white: 0.05), Color(white: 0.1)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+        VStack(spacing: 0) {
+            // Main timecode area — fills available space
+            ZStack {
+                // Dark gradient background
+                LinearGradient(
+                    colors: [Color(white: 0.05), Color(white: 0.1)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
 
-            // Subtle radial glow behind timecode
-            GeometryReader { geometry in
-                VStack {
-                    // Timecode display
-                    TimecodeDisplayView(
-                        timecode: midiManager.timecode,
-                        tubeColor: midiManager.tubeColor
-                    )
-                    .frame(
-                        minWidth: 400,
-                        maxWidth: .infinity,
-                        minHeight: 80,
-                        maxHeight: 100
-                    )
-                    .padding(.top, 12)
+                // Timecode display — scales with window
+                TimecodeDisplayView(
+                    timecode: midiManager.timecode,
+                    tubeColor: midiManager.tubeColor
+                )
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
 
-                    // Frame rate label
-                    Text(midiManager.frameRate)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(Color(white: 0.5))
-                }
+                // (FPS badge moved to settings bar)
             }
 
-            // Bottom controls overlay
-            VStack {
-                Spacer()
-
-                // Device picker + Color picker
-                HStack(spacing: 12) {
-                    // MIDI device picker
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("MIDI Input Device:")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Color(white: 0.5))
-
-                        Menu {
-                            if midiManager.availableDevices.isEmpty {
-                                Button("No MIDI devices found") {}
-                                    .disabled(true)
-                            }
-                            ForEach(midiManager.availableDevices) { device in
-                                Button(device.name) {
-                                    midiManager.selectedDevice = device
-                                }
-                            }
-                        } label: {
-                            HStack {
-                                Text(midiManager.selectedDevice?.name ?? "No MIDI devices found")
-                                Spacer()
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .foregroundStyle(Color(white: 0.5))
-                                    .font(.system(size: 10))
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color(white: 0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
-                        }
-                        .buttonStyle(.plain)
-                    }
+            // Settings bar
+            HStack(spacing: 0) {
+                // Left group: MTC status + MIDI device
+                HStack(spacing: 0) {
+                    Text(midiManager.frameRate.isEmpty ? "No MTC" : midiManager.frameRate)
+                        .foregroundStyle(midiManager.frameRate.isEmpty ? Color(white: 0.85) : Color.orange)
+                        .padding(.horizontal, 8)
 
                     Divider()
-                        .frame(height: 30)
+                        .frame(height: 14)
+                        .overlay(Color(white: 0.35))
 
-                    // Tube color picker
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Tube Color:")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(Color(white: 0.5))
+                    Text("MIDI:")
+                        .foregroundStyle(Color(white: 0.85))
+                        .padding(.leading, 8)
 
-                        Menu {
-                            ForEach(TubeColor.allCases) { color in
-                                Button(color.rawValue.capitalized) {
-                                    midiManager.tubeColor = color
+                    Menu {
+                        if midiManager.availableDevices.isEmpty {
+                            Button("No MIDI devices found") {}
+                                .disabled(true)
+                        }
+                        ForEach(midiManager.availableDevices) { device in
+                            Button(action: { midiManager.selectedDevice = device }) {
+                                HStack {
+                                    Text(device.name)
+                                    if device == midiManager.selectedDevice {
+                                        Image(systemName: "checkmark")
+                                    }
                                 }
                             }
-                        } label: {
-                            HStack {
-                                Text(midiManager.tubeColor.rawValue.capitalized)
-                                Spacer()
-                                Image(systemName: "chevron.up.chevron.down")
-                                    .foregroundStyle(Color(white: 0.5))
-                                    .font(.system(size: 10))
-                            }
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color(white: 0.15))
-                            .clipShape(RoundedRectangle(cornerRadius: 6))
                         }
-                        .buttonStyle(.borderedProminent)
+                        Divider()
+                        Button("Rescan Devices") {
+                            midiManager.scanDevices()
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(midiManager.selectedDevice?.name ?? "None")
+                                .lineLimit(1)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 9))
+                                .foregroundStyle(Color(white: 0.6))
+                        }
                     }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 4)
+                    .padding(.trailing, 8)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
+                .padding(.vertical, 4)
+                .background(Color(white: 0.22))
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+
+                Spacer()
+
+                // Right group: Color + Pin
+                HStack(spacing: 0) {
+                    Text("Color:")
+                        .foregroundStyle(Color(white: 0.85))
+                        .padding(.leading, 8)
+
+                    Menu {
+                        ForEach(TubeColor.allCases) { color in
+                            Button(action: { midiManager.tubeColor = color }) {
+                                HStack {
+                                    Text(color.rawValue.capitalized)
+                                    if color == midiManager.tubeColor {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Text(midiManager.tubeColor.rawValue.capitalized)
+                            Image(systemName: "chevron.up.chevron.down")
+                                .font(.system(size: 9))
+                                .foregroundStyle(Color(white: 0.6))
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.leading, 4)
+
+                    Divider()
+                        .frame(height: 14)
+                        .overlay(Color(white: 0.35))
+                        .padding(.leading, 8)
+
+                    Button(action: { midiManager.alwaysOnTop.toggle() }) {
+                        Image(systemName: midiManager.alwaysOnTop ? "pin.fill" : "pin")
+                            .font(.system(size: 11))
+                            .foregroundStyle(midiManager.alwaysOnTop ? Color.orange : Color(white: 0.85))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 8)
+                    .help("Always on top")
+                }
+                .padding(.vertical, 4)
+                .background(Color(white: 0.22))
+                .clipShape(RoundedRectangle(cornerRadius: 5))
             }
-        }
-        .onTapGesture(count: 2) {
-            midiManager.scanDevices()
+            .font(.system(size: 12))
+            .foregroundStyle(Color(white: 0.85))
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Color(white: 0.14))
         }
         .background(Color.black)
     }

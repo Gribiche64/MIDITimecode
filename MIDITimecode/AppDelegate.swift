@@ -1,12 +1,15 @@
 import AppKit
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    private let minWidth: CGFloat = 540
+    private let minHeight: CGFloat = 190
+    private let aspectRatio: CGFloat = 540.0 / 190.0
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Configure the main window
         if let window = NSApplication.shared.windows.first {
             window.isMovableByWindowBackground = true
-            window.level = .floating
-            window.setFrame(window.frame, display: true)
+            window.delegate = self
+            window.minSize = NSSize(width: minWidth, height: minHeight)
         }
     }
 
@@ -14,7 +17,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
-    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
-        nil
+    func windowWillResize(_ sender: NSWindow, to frameSize: NSSize) -> NSSize {
+        let width = max(frameSize.width, minWidth)
+        let height = max(width / aspectRatio, minHeight)
+        return NSSize(width: max(width, height * aspectRatio), height: height)
     }
 }

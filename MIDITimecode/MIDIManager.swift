@@ -1,3 +1,4 @@
+import AppKit
 import CoreMIDI
 import Combine
 import Foundation
@@ -10,6 +11,9 @@ class MIDIManager: ObservableObject {
         didSet { listenToSelectedDevice() }
     }
     @Published var tubeColor: TubeColor = .orange
+    @Published var alwaysOnTop: Bool = false {
+        didSet { updateWindowLevel() }
+    }
 
     private var midiClient: MIDIClientRef = 0
     private var inputPort: MIDIPortRef = 0
@@ -89,6 +93,16 @@ class MIDIManager: ObservableObject {
         // Connect to the selected device
         guard let device = selectedDevice else { return }
         MIDIPortConnectSource(inputPort, device.endpoint, nil)
+    }
+
+    // MARK: - Window
+
+    private func updateWindowLevel() {
+        DispatchQueue.main.async {
+            if let window = NSApplication.shared.windows.first {
+                window.level = self.alwaysOnTop ? .floating : .normal
+            }
+        }
     }
 
     // MARK: - MTC Parsing
