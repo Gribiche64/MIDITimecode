@@ -54,18 +54,22 @@ class AudioManager: ObservableObject {
         let engine = AVAudioEngine()
         self.engine = engine
 
-        // Access inputNode first to create the audio unit
+        // Access inputNode to create the underlying AUHAL audio unit
         let inputNode = engine.inputNode
 
-        // Set the desired input device on the audio unit
         guard let audioUnit = inputNode.audioUnit else {
             logger.error("Cannot start: inputNode.audioUnit is nil")
             self.engine = nil
             return
         }
 
+        // CRITICAL: AUHAL must be uninitialised before changing the current device.
+        // Otherwise the property set is silently ignored and the engine keeps using
+        // the default device.
+        AudioUnitUninitialize(audioUnit)
+
         var devID = device.deviceID
-        let status = AudioUnitSetProperty(
+        let setStatus = AudioUnitSetProperty(
             audioUnit,
             kAudioOutputUnitProperty_CurrentDevice,
             kAudioUnitScope_Global,
@@ -74,26 +78,51 @@ class AudioManager: ObservableObject {
             UInt32(MemoryLayout<AudioDeviceID>.size)
         )
 
-        if status != noErr {
-            logger.error("Failed to set input device '\(device.name)' (id=\(device.deviceID)): OSStatus \(status)")
+        if setStatus != noErr {
+            logger.error("Failed to set device '\(device.name)' (id=\(device.deviceID)): OSStatus \(setStatus)")
             self.engine = nil
             return
         }
 
-        // Re-read format after device change — the format reflects the new device
+        let initStatus = AudioUnitInitialize(audioUnit)
+        if initStatus != noErr {
+            logger.error("Failed to reinitialise AUHAL after device change: OSStatus \(initStatus)")
+            self.engine = nil
+            return
+        }
+
+        // Verify the device actually changed
+        var currentDev: AudioDeviceID = 0
+        var sz = UInt32(MemoryLayout<AudioDeviceID>.size)
+        AudioUnitGetProperty(audioUnit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &currentDev, &sz)
+        logger.info("AUHAL device after change: \(currentDev) (requested \(device.deviceID))")
+
+        // Re-read format after device change
         let hwFormat = inputNode.outputFormat(forBus: 0)
         let sampleRate = hwFormat.sampleRate
 
-        logger.info("Starting: device='\(device.name)', sampleRate=\(sampleRate), channels=\(hwFormat.channelCount)")
+        logger.info("Starting: device='\(device.name)' (id=\(device.deviceID)), sampleRate=\(sampleRate), hwChannels=\(hwFormat.channelCount), deviceChannels=\(device.inputChannelCount)")
 
         guard sampleRate > 0 else {
-            logger.error("Invalid sample rate (0) for device '\(device.name)'. Device may not be configured for input.")
+            logger.error("Invalid sample rate (0) for device '\(device.name)'.")
             self.engine = nil
             return
         }
 
-        // Install tap — use nil format to let the engine pick the best match
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+        // Build an explicit mono format matching the device's sample rate.
+        // Avoids channel-layout mismatches that cause the engine to fail silently.
+        guard let tapFormat = AVAudioFormat(
+            standardFormatWithSampleRate: sampleRate,
+            channels: AVAudioChannelCount(device.inputChannelCount)
+        ) else {
+            logger.error("Failed to create AVAudioFormat for \(device.inputChannelCount)ch @ \(sampleRate)Hz")
+            self.engine = nil
+            return
+        }
+
+        logger.info("Installing tap with format: \(tapFormat.description)")
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
             self?.processAudioBuffer(buffer, sampleRate: buffer.format.sampleRate)
         }
 

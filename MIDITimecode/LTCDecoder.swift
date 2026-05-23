@@ -23,26 +23,35 @@ struct LTCDecoder {
     // MARK: - Configuration
 
     /// Minimum signal amplitude to register a zero crossing. Relative to recent peak.
-    var hysteresisRatio: Float = 0.1
+    var hysteresisRatio: Float = 0.15
 
     // MARK: - Internal state
 
     private var sampleRate: Double = 48000.0
 
-    // Zero-crossing detection
+    // Zero-crossing detection (Schmitt trigger)
     private var lastSample: Float = 0.0
-    private var lastCrossingPosition: Int = 0
     private var sampleCounter: Int = 0
     private var peakLevel: Float = 0.0
-    private var peakDecay: Float = 0.0
+    private var schmittHigh: Bool = false  // current polarity state
 
     // Bit period tracking
     private var estimatedBitPeriod: Double = 0.0
-    private var lastTransitionWasShort: Bool = false
-    private var pendingBit: Bool = false
     private var hasPendingBit: Bool = false
+    private var bootstrapCount: Int = 0
+    private let bootstrapTarget: Int = 8
 
-    // Bit buffer — 80 bits stored as two UInt64s (low holds bits 0-63, high holds bits 64-79)
+    // Resync watchdog — escalating recovery
+    private var bitsSinceLastSync: Int = 0
+    private let softResyncThreshold: Int = 160   // 2 frames — clear pending bit
+    private let hardResyncThreshold: Int = 800   // 10 frames — full reset
+    private var softResyncFired: Bool = false
+
+    // Bit buffer — 80 bits stored as two UInt64s
+    // New bits are shifted in at the LSB (right). After 80 bits:
+    //   bitsHigh[15..0] = LTC bits 0..15 (oldest, reversed: bit 0 at position 15)
+    //   bitsLow[63..0]  = LTC bits 16..79 (newest, reversed: bit 79 at position 0)
+    // Sync word (LTC bits 64-79) occupies bitsLow[15..0].
     private var bitsLow: UInt64 = 0
     private var bitsHigh: UInt64 = 0
     private var totalBitsReceived: Int = 0
@@ -51,9 +60,10 @@ struct LTCDecoder {
     private var samplesSinceLastCrossing: Int = 0
     private let dropoutThresholdMultiplier: Double = 3.0
 
-    // Forward sync word: 0011 1111 1111 1101 (bits 64-79 of an LTC frame)
+    // Forward sync word: 0011 1111 1111 1101 (SMPTE, MSB-first in temporal order)
+    // In our buffer (newest at LSB), this appears as 0x3FFD in bitsLow[15..0].
     private static let syncWordForward: UInt16 = 0x3FFD
-    // Reverse sync word (bit-reversed)
+    // Reverse sync word (bit-reversed temporal order)
     private static let syncWordReverse: UInt16 = 0xBFFC
 
     // MARK: - Processing
@@ -94,23 +104,25 @@ struct LTCDecoder {
             }
         }
 
-        // Zero-crossing detection with hysteresis
-        let threshold = peakLevel * hysteresisRatio
-        guard threshold > 0.001 else {
-            lastSample = sample
+        // Schmitt trigger: track polarity with hysteresis to reject noise around zero.
+        // We only flip state when the signal clearly exceeds the opposite threshold.
+        let upperThreshold = peakLevel * hysteresisRatio
+        let lowerThreshold = -upperThreshold
+
+        guard upperThreshold > 0.001 else {
             return nil  // Signal too weak
         }
 
         let crossed: Bool
-        if lastSample <= 0 && sample > threshold {
+        if !schmittHigh && sample > upperThreshold {
+            schmittHigh = true
             crossed = true
-        } else if lastSample >= 0 && sample < -threshold {
+        } else if schmittHigh && sample < lowerThreshold {
+            schmittHigh = false
             crossed = true
         } else {
             crossed = false
         }
-
-        lastSample = sample
 
         guard crossed else { return nil }
 
@@ -118,28 +130,34 @@ struct LTCDecoder {
         let interval = samplesSinceLastCrossing
         samplesSinceLastCrossing = 0
 
-        // First crossing — can't determine interval yet
-        guard estimatedBitPeriod > 0 || totalBitsReceived > 0 else {
-            lastCrossingPosition = sampleCounter
-            // Bootstrap: wait for a few crossings to estimate bit period
-            if interval > 2 {
+        // Reject spurious crossings (e.g., silence-to-signal transition).
+        // Real biphase intervals at any standard rate/sample rate are at least ~10 samples.
+        guard interval > 4 else { return nil }
+
+        // Bootstrap: collect the first few intervals to find the full bit period.
+        // The longest interval in any biphase mark signal is exactly one bit period.
+        if bootstrapCount < bootstrapTarget {
+            if Double(interval) > estimatedBitPeriod {
                 estimatedBitPeriod = Double(interval)
             }
+            bootstrapCount += 1
             return nil
         }
 
-        // Bootstrap bit period from first few transitions
-        if estimatedBitPeriod == 0 {
+        // Self-correct: if an interval is much longer than estimated, our estimate
+        // was probably from a half-bit. Reset to this longer interval.
+        let ratio = Double(interval) / estimatedBitPeriod
+        if ratio > 1.7 {
             estimatedBitPeriod = Double(interval)
+            hasPendingBit = false
             return nil
         }
 
         // Classify interval as short (half-bit / mid-cell) or long (full bit / cell boundary)
-        let ratio = Double(interval) / estimatedBitPeriod
         let isShort = ratio < 0.75
 
         // Adaptive bit period tracking using long intervals
-        if !isShort {
+        if !isShort && ratio > 0.75 && ratio < 1.3 {
             estimatedBitPeriod = estimatedBitPeriod * 0.9 + Double(interval) * 0.1
         }
 
@@ -150,15 +168,12 @@ struct LTCDecoder {
 
         if isShort {
             if hasPendingBit {
-                // Second short interval — this completes a '1' bit
                 decodedBit = true
                 hasPendingBit = false
             } else {
-                // First short interval — wait for the second
                 hasPendingBit = true
             }
         } else {
-            // Long interval — this is a '0' bit
             hasPendingBit = false
             decodedBit = false
         }
@@ -172,25 +187,52 @@ struct LTCDecoder {
     // MARK: - Bit buffer
 
     private mutating func pushBit(_ bit: Bool) -> Timecode? {
-        // Shift the 80-bit buffer left by 1
+        // Shift the 80-bit buffer left by 1, new bit enters at LSB
         bitsHigh = (bitsHigh << 1) | (bitsLow >> 63)
         bitsLow = bitsLow << 1
         if bit { bitsLow |= 1 }
         totalBitsReceived += 1
+        bitsSinceLastSync += 1
+
+        // Escalating resync watchdog:
+        // - Soft (2 frames): just realign the biphase state machine
+        // - Hard (10 frames): full re-bootstrap from current signal
+        if !softResyncFired && bitsSinceLastSync > softResyncThreshold {
+            hasPendingBit = false
+            softResyncFired = true
+        }
+        if bitsSinceLastSync > hardResyncThreshold {
+            hasPendingBit = false
+            bitsSinceLastSync = 0
+            softResyncFired = false
+            bitsLow = 0
+            bitsHigh = 0
+            totalBitsReceived = 0
+            estimatedBitPeriod = 0.0
+            bootstrapCount = 0
+            isLocked = false
+        }
 
         // Need at least 80 bits before checking sync
         guard totalBitsReceived >= 80 else { return nil }
 
-        // Check for sync word in bits 64-79 (the high word, low 16 bits)
-        let syncCandidate = UInt16(bitsHigh & 0xFFFF)
+        // The sync word (LTC bits 64-79) occupies the lowest 16 bits of bitsLow.
+        // Allow up to 1 bit error to handle minor decoder slips on real-world signals.
+        let syncCandidate = UInt16(bitsLow & 0xFFFF)
+        let forwardErrors = popcount(syncCandidate ^ Self.syncWordForward)
+        let reverseErrors = popcount(syncCandidate ^ Self.syncWordReverse)
 
-        if syncCandidate == Self.syncWordForward {
+        if forwardErrors <= 1 {
             isReversing = false
             isLocked = true
+            bitsSinceLastSync = 0
+            softResyncFired = false
             return parseFrame(reversed: false)
-        } else if syncCandidate == Self.syncWordReverse {
+        } else if reverseErrors <= 1 {
             isReversing = true
             isLocked = true
+            bitsSinceLastSync = 0
+            softResyncFired = false
             return parseFrame(reversed: true)
         }
 
@@ -200,34 +242,37 @@ struct LTCDecoder {
     // MARK: - Frame parsing
 
     private mutating func parseFrame(reversed: Bool) -> Timecode {
-        // The 64 data bits are in bitsLow (when not reversed)
-        var data = bitsLow
+        // Extract the 64 data bits (LTC bits 0-63).
+        // In the buffer: bitsHigh holds bits 0-15, bitsLow >> 16 holds bits 16-63.
+        // But bit ordering is reversed (bit 0 is at MSB side of the combined value).
+        let rawData = (UInt64(bitsHigh) << 48) | (bitsLow >> 16)
 
-        if reversed {
-            data = bitReverse64(data)
-        }
+        // For forward playback: bits arrived 0,1,...,63 so bit 0 is at position 63.
+        // bitReverse64 puts bit 0 at position 0 where the BCD extraction expects it.
+        // For reverse playback: bits arrived 63,62,...,0 so bit 0 is already at position 0.
+        let data = reversed ? rawData : bitReverse64(rawData)
 
         // Extract BCD fields from the 64 data bits
-        // LTC bit layout (data bits 0-63):
-        // 0-3:   Frame units
+        // LTC bit layout (bits 0-63):
+        // 0-3:   Frame units (BCD)
         // 4-7:   User bits field 1
-        // 8-9:   Frame tens
+        // 8-9:   Frame tens (BCD)
         // 10:    Drop frame flag
         // 11:    Color frame flag
         // 12-15: User bits field 2
-        // 16-19: Seconds units
+        // 16-19: Seconds units (BCD)
         // 20-23: User bits field 3
-        // 24-26: Seconds tens
+        // 24-26: Seconds tens (BCD)
         // 27:    Biphase correction bit
         // 28-31: User bits field 4
-        // 32-35: Minutes units
+        // 32-35: Minutes units (BCD)
         // 36-39: User bits field 5
-        // 40-42: Minutes tens
+        // 40-42: Minutes tens (BCD)
         // 43:    Binary group flag
         // 44-47: User bits field 6
-        // 48-51: Hours units
+        // 48-51: Hours units (BCD)
         // 52-55: User bits field 7
-        // 56-57: Hours tens
+        // 56-57: Hours tens (BCD)
         // 58:    Binary group flag
         // 59:    Polarity correction bit
         // 60-63: User bits field 8
@@ -275,20 +320,25 @@ struct LTCDecoder {
 
     // MARK: - Utilities
 
+    /// Count set bits in a UInt16.
+    private func popcount(_ value: UInt16) -> Int {
+        var v = value
+        var count = 0
+        while v != 0 {
+            count += Int(v & 1)
+            v >>= 1
+        }
+        return count
+    }
+
     /// Reverse all 64 bits.
     private func bitReverse64(_ value: UInt64) -> UInt64 {
         var v = value
-        // Swap adjacent bits
         v = ((v >> 1) & 0x5555555555555555) | ((v & 0x5555555555555555) << 1)
-        // Swap adjacent pairs
         v = ((v >> 2) & 0x3333333333333333) | ((v & 0x3333333333333333) << 2)
-        // Swap adjacent nibbles
         v = ((v >> 4) & 0x0F0F0F0F0F0F0F0F) | ((v & 0x0F0F0F0F0F0F0F0F) << 4)
-        // Swap adjacent bytes
         v = ((v >> 8) & 0x00FF00FF00FF00FF) | ((v & 0x00FF00FF00FF00FF) << 8)
-        // Swap adjacent 16-bit words
         v = ((v >> 16) & 0x0000FFFF0000FFFF) | ((v & 0x0000FFFF0000FFFF) << 16)
-        // Swap 32-bit halves
         v = (v >> 32) | (v << 32)
         return v
     }
@@ -300,17 +350,17 @@ struct LTCDecoder {
         isLocked = false
         signalLevel = 0.0
         lastSample = 0.0
-        lastCrossingPosition = 0
         sampleCounter = 0
         peakLevel = 0.0
-        peakDecay = 0.0
+        schmittHigh = false
         estimatedBitPeriod = 0.0
-        lastTransitionWasShort = false
-        pendingBit = false
         hasPendingBit = false
+        bootstrapCount = 0
         bitsLow = 0
         bitsHigh = 0
         totalBitsReceived = 0
         samplesSinceLastCrossing = 0
+        bitsSinceLastSync = 0
+        softResyncFired = false
     }
 }
