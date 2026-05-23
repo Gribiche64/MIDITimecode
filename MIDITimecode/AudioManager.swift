@@ -2,6 +2,9 @@ import AVFoundation
 import Combine
 import CoreAudio
 import Foundation
+import os.log
+
+private let logger = Logger(subsystem: "Rob-Sinclair-Inc.MIDITimecode", category: "AudioManager")
 
 class AudioManager: ObservableObject {
     @Published var availableDevices: [AudioDevice] = []
@@ -30,6 +33,7 @@ class AudioManager: ObservableObject {
 
     func scanDevices() {
         let devices = AudioDevice.availableInputDevices()
+        logger.info("Scanned audio devices: \(devices.map { "\($0.name) (\($0.inputChannelCount)ch, id=\($0.deviceID))" }.joined(separator: ", "))")
         DispatchQueue.main.async {
             self.availableDevices = devices
             if self.selectedDevice == nil, let first = devices.first {
@@ -40,30 +44,66 @@ class AudioManager: ObservableObject {
 
     func start() {
         guard !isRunning else { return }
-        guard let device = selectedDevice else { return }
+        guard let device = selectedDevice else {
+            logger.warning("Cannot start: no device selected")
+            return
+        }
 
         decoder.reset()
 
         let engine = AVAudioEngine()
         self.engine = engine
 
-        // Set the input device on the engine's audio unit
-        setInputDevice(device.deviceID, on: engine)
-
+        // Access inputNode first to create the audio unit
         let inputNode = engine.inputNode
+
+        // Set the desired input device on the audio unit
+        guard let audioUnit = inputNode.audioUnit else {
+            logger.error("Cannot start: inputNode.audioUnit is nil")
+            self.engine = nil
+            return
+        }
+
+        var devID = device.deviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &devID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+
+        if status != noErr {
+            logger.error("Failed to set input device '\(device.name)' (id=\(device.deviceID)): OSStatus \(status)")
+            self.engine = nil
+            return
+        }
+
+        // Re-read format after device change — the format reflects the new device
         let hwFormat = inputNode.outputFormat(forBus: 0)
         let sampleRate = hwFormat.sampleRate
 
-        // Install a tap — request the hardware format to avoid conversion
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { [weak self] buffer, _ in
-            self?.processAudioBuffer(buffer, sampleRate: sampleRate)
+        logger.info("Starting: device='\(device.name)', sampleRate=\(sampleRate), channels=\(hwFormat.channelCount)")
+
+        guard sampleRate > 0 else {
+            logger.error("Invalid sample rate (0) for device '\(device.name)'. Device may not be configured for input.")
+            self.engine = nil
+            return
+        }
+
+        // Install tap — use nil format to let the engine pick the best match
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+            self?.processAudioBuffer(buffer, sampleRate: buffer.format.sampleRate)
         }
 
         do {
             try engine.start()
             isRunning = true
+            logger.info("Engine started successfully for '\(device.name)'")
         } catch {
-            print("AudioManager: Failed to start engine: \(error)")
+            logger.error("Failed to start engine: \(error.localizedDescription)")
+            inputNode.removeTap(onBus: 0)
             self.engine = nil
         }
     }
@@ -84,21 +124,6 @@ class AudioManager: ObservableObject {
     private func restart() {
         stop()
         start()
-    }
-
-    private func setInputDevice(_ deviceID: AudioDeviceID, on engine: AVAudioEngine) {
-        let inputNode = engine.inputNode
-        guard let audioUnit = inputNode.audioUnit else { return }
-
-        var devID = deviceID
-        AudioUnitSetProperty(
-            audioUnit,
-            kAudioOutputUnitProperty_CurrentDevice,
-            kAudioUnitScope_Global,
-            0,
-            &devID,
-            UInt32(MemoryLayout<AudioDeviceID>.size)
-        )
     }
 
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, sampleRate: Double) {
