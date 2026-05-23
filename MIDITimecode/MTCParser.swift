@@ -6,6 +6,7 @@ struct MTCParser {
     private(set) var seconds: UInt8 = 0
     private(set) var frames: UInt8 = 0
     private(set) var frameRate: String = ""
+    private(set) var detectedRate: FrameRate?
 
     private var mtcHours: UInt8 = 0
     private var mtcMinutes: UInt8 = 0
@@ -14,6 +15,12 @@ struct MTCParser {
 
     var timecode: String {
         String(format: "%02d:%02d:%02d:%02d", hours, minutes, seconds, frames)
+    }
+
+    /// The last assembled timecode as a typed value, or nil if no frame received yet.
+    var assembledTimecode: Timecode? {
+        guard let rate = detectedRate else { return nil }
+        return Timecode(hours: hours, minutes: minutes, seconds: seconds, frames: frames, rate: rate)
     }
 
     /// Process a single MTC quarter-frame data byte.
@@ -39,7 +46,9 @@ struct MTCParser {
             mtcHours = (mtcHours & 0xF0) | nibbleValue
         case 7:
             mtcHours = (mtcHours & 0x0F) | ((nibbleValue & 0x01) << 4)
-            updateFrameRate(nibbleValue)
+            let rateCode = (nibbleValue >> 1) & 0x03
+            detectedRate = FrameRate(mtcRateCode: rateCode)
+            frameRate = detectedRate?.rawValue ?? ""
 
             hours = mtcHours
             minutes = min(mtcMinutes, 59)
@@ -50,16 +59,5 @@ struct MTCParser {
             break
         }
         return false
-    }
-
-    private mutating func updateFrameRate(_ rateNibble: UInt8) {
-        let rateType = (rateNibble >> 1) & 0x03
-        switch rateType {
-        case 0: frameRate = "24 fps"
-        case 1: frameRate = "25 fps"
-        case 2: frameRate = "29.97 fps (DF)"
-        case 3: frameRate = "30 fps"
-        default: frameRate = ""
-        }
     }
 }

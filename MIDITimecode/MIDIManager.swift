@@ -1,4 +1,3 @@
-import AppKit
 import CoreMIDI
 import Combine
 import Foundation
@@ -6,35 +5,49 @@ import Foundation
 class MIDIManager: ObservableObject {
     @Published var timecode: String = "00:00:00:00"
     @Published var frameRate: String = ""
+    @Published var latestTimecode: Timecode?
     @Published var availableDevices: [MIDIDevice] = []
     @Published var selectedDevice: MIDIDevice? {
-        didSet { listenToSelectedDevice() }
-    }
-    @Published var tubeColor: TubeColor = .orange
-    @Published var alwaysOnTop: Bool = false {
-        didSet { updateWindowLevel() }
+        didSet {
+            if isRunning { listenToSelectedDevice() }
+        }
     }
 
     private var midiClient: MIDIClientRef = 0
     private var inputPort: MIDIPortRef = 0
     private var parser = MTCParser()
+    private var isRunning = false
 
     init() {
         setupMIDI()
         scanDevices()
     }
 
+    // MARK: - Lifecycle
+
+    func start() {
+        isRunning = true
+        listenToSelectedDevice()
+    }
+
+    func stop() {
+        isRunning = false
+        let sourceCount = MIDIGetNumberOfSources()
+        for i in 0..<sourceCount {
+            MIDIPortDisconnectSource(inputPort, MIDIGetSource(i))
+        }
+    }
+
     // MARK: - MIDI Setup
 
     private func setupMIDI() {
-        let status = MIDIClientCreateWithBlock("MIDITimecodeClient" as CFString, &midiClient) { [weak self] notification in
-            // Re-scan devices on MIDI setup changes
+        let status = MIDIClientCreateWithBlock("MIDITimecodeClient" as CFString, &midiClient) { [weak self] _ in
             DispatchQueue.main.async {
                 self?.scanDevices()
             }
         }
         if status != noErr {
-            print("Error creating MIDI client: \(status)")
+            print("MIDIManager: Error creating MIDI client: \(status)")
             return
         }
 
@@ -46,13 +59,12 @@ class MIDIManager: ObservableObject {
             self?.handleMIDIPacketList(packetList)
         }
         if portStatus != noErr {
-            print("Error creating input port: \(portStatus)")
+            print("MIDIManager: Error creating input port: \(portStatus)")
         }
     }
 
     func scanDevices() {
         let sourceCount = MIDIGetNumberOfSources()
-        print("Scanning MIDI devices, found \(sourceCount)")
 
         var devices: [MIDIDevice] = []
         for i in 0..<sourceCount {
@@ -60,7 +72,6 @@ class MIDIManager: ObservableObject {
             var name: Unmanaged<CFString>?
             MIDIObjectGetStringProperty(endpoint, kMIDIPropertyName, &name)
             let deviceName = (name?.takeRetainedValue() as String?) ?? "Unknown Device"
-            print("Found MIDI device: \(deviceName)")
             devices.append(MIDIDevice(name: deviceName, endpoint: endpoint))
         }
 
@@ -79,19 +90,8 @@ class MIDIManager: ObservableObject {
             MIDIPortDisconnectSource(inputPort, MIDIGetSource(i))
         }
 
-        // Connect to the selected device
-        guard let device = selectedDevice else { return }
+        guard isRunning, let device = selectedDevice else { return }
         MIDIPortConnectSource(inputPort, device.endpoint, nil)
-    }
-
-    // MARK: - Window
-
-    private func updateWindowLevel() {
-        DispatchQueue.main.async {
-            if let window = NSApplication.shared.windows.first {
-                window.level = self.alwaysOnTop ? .floating : .normal
-            }
-        }
     }
 
     // MARK: - MTC Parsing
@@ -110,9 +110,11 @@ class MIDIManager: ObservableObject {
                     if parser.processQuarterFrame(dataByte) {
                         let tc = parser.timecode
                         let rate = parser.frameRate
+                        let assembled = parser.assembledTimecode
                         DispatchQueue.main.async {
                             self.timecode = tc
                             self.frameRate = rate
+                            self.latestTimecode = assembled
                         }
                     }
                 }

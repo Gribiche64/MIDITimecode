@@ -14,8 +14,8 @@ final class MIDIManagerTests: XCTestCase {
     }
 
     func testDefaultTubeColorIsOrange() {
-        let manager = MIDIManager()
-        XCTAssertEqual(manager.tubeColor, .orange)
+        let engine = TimecodeEngine()
+        XCTAssertEqual(engine.tubeColor, .orange)
     }
 
     func testAvailableDevicesStartsEmpty() {

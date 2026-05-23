@@ -18,9 +18,20 @@
 		A10009 /* SeparatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009; };
 		A10010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10010; };
 		A10011 /* MTCParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011; };
+		A10012 /* Timecode.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012; };
+		A10013 /* MTCGenerator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10013; };
+		A10014 /* LTCDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014; };
+		A10015 /* AudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10015; };
+		A10016 /* AudioManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016; };
+		A10017 /* VirtualMIDISource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10017; };
+		A10018 /* TimecodeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10018; };
+		A10019 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019; };
 		A10020 /* MIDIManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020; };
 		A10021 /* TubeColorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10021; };
 		A10022 /* MTCParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10022; };
+		A10023 /* TimecodeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10023; };
+		A10024 /* MTCGeneratorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10024; };
+		A10025 /* LTCDecoderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10025; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -45,9 +56,20 @@
 		B10009 /* SeparatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeparatorView.swift; sourceTree = "<group>"; };
 		B10010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		B10011 /* MTCParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCParser.swift; sourceTree = "<group>"; };
+		B10012 /* Timecode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timecode.swift; sourceTree = "<group>"; };
+		B10013 /* MTCGenerator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCGenerator.swift; sourceTree = "<group>"; };
+		B10014 /* LTCDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LTCDecoder.swift; sourceTree = "<group>"; };
+		B10015 /* AudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDevice.swift; sourceTree = "<group>"; };
+		B10016 /* AudioManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioManager.swift; sourceTree = "<group>"; };
+		B10017 /* VirtualMIDISource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMIDISource.swift; sourceTree = "<group>"; };
+		B10018 /* TimecodeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecodeEngine.swift; sourceTree = "<group>"; };
+		B10019 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
 		B10020 /* MIDIManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIDIManagerTests.swift; sourceTree = "<group>"; };
 		B10021 /* TubeColorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeColorTests.swift; sourceTree = "<group>"; };
 		B10022 /* MTCParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCParserTests.swift; sourceTree = "<group>"; };
+		B10023 /* TimecodeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecodeTests.swift; sourceTree = "<group>"; };
+		B10024 /* MTCGeneratorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCGeneratorTests.swift; sourceTree = "<group>"; };
+		B10025 /* LTCDecoderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LTCDecoderTests.swift; sourceTree = "<group>"; };
 		PR0001 /* MIDITimecode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MIDITimecode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		PR0002 /* MIDITimecodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MIDITimecodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -85,10 +107,17 @@
 				B10001 /* MIDITimecodeApp.swift */,
 				B10002 /* AppDelegate.swift */,
 				B10003 /* ContentView.swift */,
+				B10012 /* Timecode.swift */,
 				B10004 /* MIDIManager.swift */,
 				B10005 /* MIDIDevice.swift */,
-				B10006 /* TubeColor.swift */,
 				B10011 /* MTCParser.swift */,
+				B10013 /* MTCGenerator.swift */,
+				B10014 /* LTCDecoder.swift */,
+				B10015 /* AudioDevice.swift */,
+				B10016 /* AudioManager.swift */,
+				B10017 /* VirtualMIDISource.swift */,
+				B10018 /* TimecodeEngine.swift */,
+				B10006 /* TubeColor.swift */,
 				G10003 /* Views */,
 				B10010 /* Assets.xcassets */,
 			);
@@ -101,6 +130,7 @@
 				B10007 /* TimecodeDisplayView.swift */,
 				B10008 /* ValveDigitView.swift */,
 				B10009 /* SeparatorView.swift */,
+				B10019 /* MenuBarContentView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -111,6 +141,9 @@
 				B10020 /* MIDIManagerTests.swift */,
 				B10021 /* TubeColorTests.swift */,
 				B10022 /* MTCParserTests.swift */,
+				B10023 /* TimecodeTests.swift */,
+				B10024 /* MTCGeneratorTests.swift */,
+				B10025 /* LTCDecoderTests.swift */,
 			);
 			path = MIDITimecodeTests;
 			sourceTree = "<group>";
@@ -218,6 +251,7 @@
 				A10001 /* MIDITimecodeApp.swift in Sources */,
 				A10002 /* AppDelegate.swift in Sources */,
 				A10003 /* ContentView.swift in Sources */,
+				A10012 /* Timecode.swift in Sources */,
 				A10004 /* MIDIManager.swift in Sources */,
 				A10005 /* MIDIDevice.swift in Sources */,
 				A10006 /* TubeColor.swift in Sources */,
@@ -225,6 +259,13 @@
 				A10008 /* ValveDigitView.swift in Sources */,
 				A10009 /* SeparatorView.swift in Sources */,
 				A10011 /* MTCParser.swift in Sources */,
+				A10013 /* MTCGenerator.swift in Sources */,
+				A10014 /* LTCDecoder.swift in Sources */,
+				A10015 /* AudioDevice.swift in Sources */,
+				A10016 /* AudioManager.swift in Sources */,
+				A10017 /* VirtualMIDISource.swift in Sources */,
+				A10018 /* TimecodeEngine.swift in Sources */,
+				A10019 /* MenuBarContentView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -235,6 +276,9 @@
 				A10020 /* MIDIManagerTests.swift in Sources */,
 				A10021 /* TubeColorTests.swift in Sources */,
 				A10022 /* MTCParserTests.swift in Sources */,
+				A10023 /* TimecodeTests.swift in Sources */,
+				A10024 /* MTCGeneratorTests.swift in Sources */,
+				A10025 /* LTCDecoderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -380,6 +424,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright Rob Sinclair Inc.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MIDITimecode needs audio input access to decode LTC timecode from your audio interface.";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "Rob-Sinclair-Inc.MIDITimecode";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -403,6 +448,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.music";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright Rob Sinclair Inc.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "MIDITimecode needs audio input access to decode LTC timecode from your audio interface.";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "Rob-Sinclair-Inc.MIDITimecode";
 				PRODUCT_NAME = "$(TARGET_NAME)";
