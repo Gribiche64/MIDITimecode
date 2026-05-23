@@ -17,8 +17,10 @@
 		A10008 /* ValveDigitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10008; };
 		A10009 /* SeparatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10009; };
 		A10010 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = B10010; };
+		A10011 /* MTCParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10011; };
 		A10020 /* MIDIManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020; };
 		A10021 /* TubeColorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10021; };
+		A10022 /* MTCParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10022; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -42,8 +44,10 @@
 		B10008 /* ValveDigitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValveDigitView.swift; sourceTree = "<group>"; };
 		B10009 /* SeparatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeparatorView.swift; sourceTree = "<group>"; };
 		B10010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		B10011 /* MTCParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCParser.swift; sourceTree = "<group>"; };
 		B10020 /* MIDIManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIDIManagerTests.swift; sourceTree = "<group>"; };
 		B10021 /* TubeColorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeColorTests.swift; sourceTree = "<group>"; };
+		B10022 /* MTCParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCParserTests.swift; sourceTree = "<group>"; };
 		PR0001 /* MIDITimecode.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MIDITimecode.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		PR0002 /* MIDITimecodeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MIDITimecodeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -84,6 +88,7 @@
 				B10004 /* MIDIManager.swift */,
 				B10005 /* MIDIDevice.swift */,
 				B10006 /* TubeColor.swift */,
+				B10011 /* MTCParser.swift */,
 				G10003 /* Views */,
 				B10010 /* Assets.xcassets */,
 			);
@@ -105,6 +110,7 @@
 			children = (
 				B10020 /* MIDIManagerTests.swift */,
 				B10021 /* TubeColorTests.swift */,
+				B10022 /* MTCParserTests.swift */,
 			);
 			path = MIDITimecodeTests;
 			sourceTree = "<group>";
@@ -218,6 +224,7 @@
 				A10007 /* TimecodeDisplayView.swift in Sources */,
 				A10008 /* ValveDigitView.swift in Sources */,
 				A10009 /* SeparatorView.swift in Sources */,
+				A10011 /* MTCParser.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -227,6 +234,7 @@
 			files = (
 				A10020 /* MIDIManagerTests.swift in Sources */,
 				A10021 /* TubeColorTests.swift in Sources */,
+				A10022 /* MTCParserTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

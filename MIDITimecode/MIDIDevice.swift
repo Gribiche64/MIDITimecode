@@ -5,7 +5,7 @@ struct MIDIDevice: Identifiable, Hashable {
     let name: String
     let endpoint: MIDIEndpointRef
 
-    var id: String { name }
+    var id: String { "\(name)-\(endpoint)" }
 
     func hash(into hasher: inout Hasher) {
         hasher.combine(name)
