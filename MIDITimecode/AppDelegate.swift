@@ -5,6 +5,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let minHeight: CGFloat = 190
     private let aspectRatio: CGFloat = 540.0 / 190.0
 
+    private var menuBarController: MenuBarController?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         if let window = NSApplication.shared.windows.first {
             window.isMovableByWindowBackground = true
@@ -21,5 +23,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let width = max(frameSize.width, minWidth)
         let height = max(width / aspectRatio, minHeight)
         return NSSize(width: max(width, height * aspectRatio), height: height)
+    }
+
+    func installMenuBar(engine: TimecodeEngine) {
+        // Idempotent — only create once
+        guard menuBarController == nil else { return }
+        menuBarController = MenuBarController(engine: engine)
     }
 }

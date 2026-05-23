@@ -26,6 +26,8 @@
 		A10017 /* VirtualMIDISource.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10017; };
 		A10018 /* TimecodeEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10018; };
 		A10019 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019; };
+		A10026 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10026; };
+		A10027 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10027; };
 		A10020 /* MIDIManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020; };
 		A10021 /* TubeColorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10021; };
 		A10022 /* MTCParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10022; };
@@ -64,6 +66,8 @@
 		B10017 /* VirtualMIDISource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VirtualMIDISource.swift; sourceTree = "<group>"; };
 		B10018 /* TimecodeEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecodeEngine.swift; sourceTree = "<group>"; };
 		B10019 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
+		B10026 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
+		B10027 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
 		B10020 /* MIDIManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIDIManagerTests.swift; sourceTree = "<group>"; };
 		B10021 /* TubeColorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeColorTests.swift; sourceTree = "<group>"; };
 		B10022 /* MTCParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCParserTests.swift; sourceTree = "<group>"; };
@@ -117,6 +121,8 @@
 				B10016 /* AudioManager.swift */,
 				B10017 /* VirtualMIDISource.swift */,
 				B10018 /* TimecodeEngine.swift */,
+				B10026 /* Settings.swift */,
+				B10027 /* MenuBarController.swift */,
 				B10006 /* TubeColor.swift */,
 				G10003 /* Views */,
 				B10010 /* Assets.xcassets */,
@@ -266,6 +272,8 @@
 				A10017 /* VirtualMIDISource.swift in Sources */,
 				A10018 /* TimecodeEngine.swift in Sources */,
 				A10019 /* MenuBarContentView.swift in Sources */,
+				A10026 /* Settings.swift in Sources */,
+				A10027 /* MenuBarController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

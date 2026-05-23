@@ -11,16 +11,11 @@ struct MIDITimecodeApp: App {
                 .environmentObject(engine)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color.black)
+                .onAppear {
+                    appDelegate.installMenuBar(engine: engine)
+                }
         }
         .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 540, height: 190)
-
-        MenuBarExtra {
-            MenuBarContentView()
-                .environmentObject(engine)
-        } label: {
-            Text(engine.timecode)
-                .monospacedDigit()
-        }
     }
 }
