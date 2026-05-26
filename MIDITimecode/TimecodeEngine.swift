@@ -109,6 +109,11 @@ class TimecodeEngine: ObservableObject {
                    self.midiManager.selectedDevice?.name != savedName {
                     self.midiManager.selectedDevice = match
                 }
+                // If we're in MTC mode and have a device but aren't running
+                // (initial start() returned early before devices appeared), start now.
+                if self.inputMode == .mtc && self.midiManager.selectedDevice != nil {
+                    self.midiManager.start()
+                }
             }
             .store(in: &cancellables)
 
@@ -128,6 +133,11 @@ class TimecodeEngine: ObservableObject {
                    let match = devices.first(where: { $0.name == savedName }),
                    self.audioManager.selectedDevice?.name != savedName {
                     self.audioManager.selectedDevice = match
+                }
+                // If we're in LTC mode and have a device but aren't running
+                // (initial start() returned early before devices appeared), start now.
+                if self.inputMode == .ltc && self.audioManager.selectedDevice != nil {
+                    self.audioManager.start()
                 }
             }
             .store(in: &cancellables)
