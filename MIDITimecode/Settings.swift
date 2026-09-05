@@ -14,6 +14,7 @@ enum Settings {
         static let alwaysOnTop = "alwaysOnTop"
         static let virtualMTCEnabled = "virtualMTCEnabled"
         static let freewheelSeconds = "freewheelSeconds"
+        static let virtualSourceUniqueID = "virtualSourceUniqueID"
     }
 
     /// Default freewheel on loss of LTC, in seconds.
@@ -54,6 +55,12 @@ enum Settings {
     static var virtualMTCEnabled: Bool {
         get { defaults.bool(forKey: Keys.virtualMTCEnabled) }
         set { defaults.set(newValue, forKey: Keys.virtualMTCEnabled) }
+    }
+
+    /// CoreMIDI unique ID for the virtual source; 0 until one has been chosen.
+    static var virtualSourceUniqueID: Int32 {
+        get { Int32(clamping: defaults.integer(forKey: Keys.virtualSourceUniqueID)) }
+        set { defaults.set(Int(newValue), forKey: Keys.virtualSourceUniqueID) }
     }
 
     static var freewheelSeconds: Double {

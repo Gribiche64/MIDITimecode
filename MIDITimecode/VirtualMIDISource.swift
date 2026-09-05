@@ -69,6 +69,7 @@ class VirtualMIDISource: ObservableObject {
             midiClient = 0
             return
         }
+        applyPersistentUniqueID()
 
         let scheduler = MTCStreamScheduler(
             configuration: configuration,
@@ -114,6 +115,31 @@ class VirtualMIDISource: ObservableObject {
     }
 
     // MARK: - Private
+
+    /// Give the virtual source the same CoreMIDI unique ID on every launch.
+    /// Receivers that remember a port by ID (WebMIDI apps such as CuePilot
+    /// derive the port ID from it) otherwise lose the source each time the
+    /// app restarts. The ID is chosen once and kept in the app's defaults.
+    private func applyPersistentUniqueID() {
+        var uniqueID = Settings.virtualSourceUniqueID
+        for attempt in 0..<8 {
+            if uniqueID == 0 {
+                uniqueID = Int32.random(in: 1...Int32.max)
+            }
+            let status = MIDIObjectSetIntegerProperty(virtualEndpoint, kMIDIPropertyUniqueID, uniqueID)
+            if status == noErr {
+                Settings.virtualSourceUniqueID = uniqueID
+                logger.info("Virtual source unique ID \(uniqueID) (attempt \(attempt + 1))")
+                return
+            }
+            if status != kMIDIIDNotUnique {
+                logger.error("Could not set virtual source unique ID: \(status); using CoreMIDI's assigned ID")
+                return
+            }
+            uniqueID = 0
+        }
+        logger.error("Could not find an unused unique ID for the virtual source; using CoreMIDI's assigned ID")
+    }
 
     private func sendMIDIBytes(_ bytes: [UInt8], at hostTime: Double) {
         guard virtualEndpoint != 0 else { return }
