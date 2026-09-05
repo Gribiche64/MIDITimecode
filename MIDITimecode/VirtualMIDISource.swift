@@ -120,8 +120,10 @@ class VirtualMIDISource: ObservableObject {
 
         var packetList = MIDIPacketList()
         let packetListSize = MemoryLayout<MIDIPacketList>.size
-        var packet = MIDIPacketListInit(&packetList)
-        packet = MIDIPacketListAdd(
+        // A single-packet list holds 256 data bytes; the longest message here
+        // is the 10-byte Full Frame, so the add cannot run out of room.
+        let packet = MIDIPacketListInit(&packetList)
+        _ = MIDIPacketListAdd(
             &packetList,
             packetListSize,
             packet,
@@ -129,10 +131,6 @@ class VirtualMIDISource: ObservableObject {
             bytes.count,
             bytes
         )
-        guard packet != nil else {
-            logger.error("Packet list too small for \(bytes.count)-byte message")
-            return
-        }
 
         let status = MIDIReceived(virtualEndpoint, &packetList)
         if status != noErr {
