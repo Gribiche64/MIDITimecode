@@ -103,7 +103,9 @@ MIDITIMECODE_SOURCE_NAME="MIDITimecode LTC dev" /path/to/MIDITimecode.app/Conten
 ```
 
 Play an LTC file into a loopback device (for example BlackHole) and read the
-MTC with a second receiver (a DAW, or this app in MTC mode on another machine).
+MTC with a second receiver. `Tools/LTCLoopbackCheck/` contains an independent
+reader that decodes the LTC itself and measures the MTC against it; see its
+README.
 
 ## Project layout
 
