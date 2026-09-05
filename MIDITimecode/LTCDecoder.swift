@@ -1,5 +1,14 @@
 import Foundation
 
+/// A decoded LTC frame and where in the audio buffer it completed.
+struct DecodedLTCFrame: Equatable {
+    let timecode: Timecode
+    /// Index (within the buffer passed to `decode`) of the sample at which the
+    /// sync word completed, i.e. the last sample of this frame. The next frame
+    /// starts one sample later.
+    let sampleOffset: Int
+}
+
 /// Pure LTC (Linear Timecode / SMPTE) audio decoder.
 ///
 /// Decodes biphase mark encoded audio into timecode frames.
@@ -70,8 +79,14 @@ struct LTCDecoder {
 
     /// Process a buffer of audio samples. Returns decoded timecodes (typically 0 or 1 per call).
     mutating func processSamples(_ samples: UnsafeBufferPointer<Float>, sampleRate: Double) -> [Timecode] {
+        decode(samples, sampleRate: sampleRate).map(\.timecode)
+    }
+
+    /// Process a buffer of audio samples. Returns each decoded frame together
+    /// with the buffer offset of the sample that completed it.
+    mutating func decode(_ samples: UnsafeBufferPointer<Float>, sampleRate: Double) -> [DecodedLTCFrame] {
         self.sampleRate = sampleRate
-        var results: [Timecode] = []
+        var results: [DecodedLTCFrame] = []
 
         // Track peak level for this buffer
         var bufferPeak: Float = 0.0
@@ -85,7 +100,7 @@ struct LTCDecoder {
 
         for i in 0..<samples.count {
             if let tc = processSample(samples[i]) {
-                results.append(tc)
+                results.append(DecodedLTCFrame(timecode: tc, sampleOffset: i))
             }
         }
         return results

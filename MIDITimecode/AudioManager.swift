@@ -23,7 +23,20 @@ class AudioManager: ObservableObject {
     @Published var isReversing: Bool = false
     @Published var signalLevel: Float = 0.0
 
+    /// A decoded LTC frame with the host time (seconds) at which it ended.
+    struct TimedFrame {
+        let timecode: Timecode
+        /// Host time of the frame's last sample; the next frame starts here.
+        let endHostTime: Double
+        let isReversing: Bool
+    }
+
+    /// Called on the audio thread for every decoded frame, in order.
+    /// Keep the handler short: it runs inside the audio tap callback.
+    var frameHandler: ((TimedFrame) -> Void)?
+
     private var engine: AVAudioEngine?
+    private var warnedMissingHostTime = false
     private var decoder = LTCDecoder()
     private var isRunning = false
 
@@ -122,8 +135,8 @@ class AudioManager: ObservableObject {
 
         logger.info("Installing tap with format: \(tapFormat.description)")
 
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, _ in
-            self?.processAudioBuffer(buffer, sampleRate: buffer.format.sampleRate)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: tapFormat) { [weak self] buffer, when in
+            self?.processAudioBuffer(buffer, at: when)
         }
 
         do {
@@ -155,21 +168,30 @@ class AudioManager: ObservableObject {
         start()
     }
 
-    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, sampleRate: Double) {
+    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, at when: AVAudioTime) {
         guard let channelData = buffer.floatChannelData else { return }
         let frameCount = Int(buffer.frameLength)
         let channelCount = Int(buffer.format.channelCount)
+        let sampleRate = buffer.format.sampleRate
 
         // Pick the user-selected channel (clamped to available channels)
         let channel = min(selectedChannel, channelCount - 1)
         let samples = UnsafeBufferPointer(start: channelData[channel], count: frameCount)
 
-        let results = decoder.processSamples(samples, sampleRate: sampleRate)
+        let bufferStart = bufferStartHostTime(when, sampleCount: frameCount, sampleRate: sampleRate)
+        let results = decoder.decode(samples, sampleRate: sampleRate)
         let locked = decoder.isLocked
         let reversing = decoder.isReversing
         let level = decoder.signalLevel
 
-        if let tc = results.last {
+        if let handler = frameHandler {
+            for frame in results {
+                let end = bufferStart + Double(frame.sampleOffset + 1) / sampleRate
+                handler(TimedFrame(timecode: frame.timecode, endHostTime: end, isReversing: reversing))
+            }
+        }
+
+        if let tc = results.last?.timecode {
             DispatchQueue.main.async {
                 self.latestTimecode = tc
                 self.isLocked = locked
@@ -182,6 +204,19 @@ class AudioManager: ObservableObject {
                 self.signalLevel = level
             }
         }
+    }
+
+    /// Host time (seconds) of the first sample in a tap buffer.
+    /// Falls back to "now minus the buffer length" if the driver gave no host time.
+    private func bufferStartHostTime(_ when: AVAudioTime, sampleCount: Int, sampleRate: Double) -> Double {
+        if when.isHostTimeValid {
+            return HostTime.seconds(fromTicks: when.hostTime)
+        }
+        if !warnedMissingHostTime {
+            warnedMissingHostTime = true
+            logger.warning("Audio tap delivered no host time; MTC timing will use buffer arrival time")
+        }
+        return HostTime.now() - Double(sampleCount) / sampleRate
     }
 
     deinit {

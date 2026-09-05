@@ -28,8 +28,8 @@ struct MenuBarContentView: View {
             }
 
             if engine.virtualMTCEnabled {
-                Text("MTC Out: Active")
-                    .foregroundStyle(.orange)
+                Text("MTC Out: \(engine.mtcOutputState.rawValue)")
+                    .foregroundStyle(engine.mtcOutputState == .locked ? .orange : .secondary)
             }
 
             Divider()

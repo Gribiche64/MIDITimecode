@@ -67,7 +67,6 @@ final class LTCDecoderTests: XCTestCase {
         for b in 0..<2 { bits[56 + b] = ((hrTens >> b) & 1) == 1 }
 
         // Bit 58: binary group flag — false
-        // Bit 59: polarity correction — false
         // User bits field 8 (bits 60-63) — zeros
 
         // Sync word (bits 64-79): 0011 1111 1111 1101 (MSB-first in temporal order)
@@ -76,6 +75,12 @@ final class LTCDecoderTests: XCTestCase {
         for b in 0..<16 {
             bits[64 + b] = ((syncWord >> (15 - b)) & 1) == 1
         }
+
+        // Bit 59: polarity correction. Set so the word holds an even number of
+        // zeros, which makes every frame end at the level it started on — a
+        // biphase-mark stream then has a transition at every frame boundary.
+        let zerosElsewhere = bits.enumerated().filter { $0.offset != 59 && !$0.element }.count
+        bits[59] = zerosElsewhere % 2 == 0
 
         // Biphase mark encode
         let samplesPerBit = sampleRate / (Double(fps) * 80.0)
@@ -159,8 +164,7 @@ final class LTCDecoderTests: XCTestCase {
         }
     }
 
-    // TODO: Fix synthetic audio bootstrap edge case — real-world LTC works
-    func _skip_testDecodeVariedTimecode() {
+    func testDecodeVariedTimecode() {
         var decoder = LTCDecoder()
         // Use preambleCount=2 (3 total frames) — matches standalone diagnostic
         let samples = synthesiseWithPreamble(
@@ -265,10 +269,84 @@ final class LTCDecoderTests: XCTestCase {
         }
     }
 
+    // MARK: - Sample offsets (used to timestamp frames on the host clock)
+
+    /// Feed a run of consecutive frames and check that each decoded frame is
+    /// reported at the sample where its sync word ends.
+    private func assertFrameOffsets(fps: Int, sampleRate: Double, file: StaticString = #filePath, line: UInt = #line) {
+        var decoder = LTCDecoder()
+        let base = Timecode(hours: 4, minutes: 20, seconds: 0, frames: 1, rate: fps == 25 ? .fps25 : .fps30)
+        let frameCount = 12
+        var samples: [Float] = []
+        var frameLengths: [Int] = []
+        // One extra trailing frame: a frame only completes once the decoder
+        // sees the transition that starts the following frame.
+        for n in 0...frameCount {
+            let tc = base.advanced(by: n)
+            let f = synthesiseLTCFrame(hours: tc.hours, minutes: tc.minutes, seconds: tc.seconds, frames: tc.frames,
+                                       sampleRate: sampleRate, fps: fps)
+            frameLengths.append(f.count)
+            samples += f
+        }
+
+        var decoded: [DecodedLTCFrame] = []
+        samples.withUnsafeBufferPointer { buffer in
+            decoded = decoder.decode(buffer, sampleRate: sampleRate)
+        }
+
+        XCTAssertGreaterThanOrEqual(decoded.count, frameCount - 4, "Expected most frames to decode", file: file, line: line)
+        XCTAssertTrue(decoder.isLocked, file: file, line: line)
+
+        // Each frame's sync word ends on the last sample of that frame.
+        var frameEnds: [Timecode: Int] = [:]
+        var end = -1
+        for n in 0...frameCount {
+            end += frameLengths[n]
+            frameEnds[base.advanced(by: n)] = end
+        }
+        for frame in decoded {
+            guard let expected = frameEnds[frame.timecode] else {
+                XCTFail("Unexpected timecode \(frame.timecode.displayString)", file: file, line: line)
+                continue
+            }
+            // The Schmitt trigger registers the final transition within a
+            // couple of samples of the true edge.
+            XCTAssertEqual(frame.sampleOffset, expected, accuracy: 2,
+                           "Offset for \(frame.timecode.displayString)", file: file, line: line)
+        }
+        if let last = decoded.last {
+            XCTAssertEqual(last.timecode, base.advanced(by: frameCount - 1), file: file, line: line)
+        }
+    }
+
+    func testFrameOffsets30fps48k() {
+        assertFrameOffsets(fps: 30, sampleRate: 48000)
+    }
+
+    func testFrameOffsets25fps48k() {
+        assertFrameOffsets(fps: 25, sampleRate: 48000)
+    }
+
+    func testFrameOffsets30fps96k() {
+        assertFrameOffsets(fps: 30, sampleRate: 96000)
+    }
+
+    func testProcessSamplesMatchesDecode() {
+        var a = LTCDecoder()
+        var b = LTCDecoder()
+        let samples = synthesiseWithPreamble(hours: 1, minutes: 2, seconds: 3, frames: 4, fps: 30)
+        var viaProcess: [Timecode] = []
+        var viaDecode: [DecodedLTCFrame] = []
+        samples.withUnsafeBufferPointer { buffer in
+            viaProcess = a.processSamples(buffer, sampleRate: 48000)
+            viaDecode = b.decode(buffer, sampleRate: 48000)
+        }
+        XCTAssertEqual(viaProcess, viaDecode.map(\.timecode))
+    }
+
     // MARK: - Lock State
 
-    // TODO: Fix synthetic audio bootstrap edge case — real-world LTC works
-    func _skip_testIsLockedAfterDecode() {
+    func testIsLockedAfterDecode() {
         var decoder = LTCDecoder()
         let samples = synthesiseWithPreamble(
             hours: 2, minutes: 30, seconds: 15, frames: 12

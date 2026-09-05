@@ -6,6 +6,10 @@ class MIDIManager: ObservableObject {
     @Published var timecode: String = "00:00:00:00"
     @Published var frameRate: String = ""
     @Published var latestTimecode: Timecode?
+
+    /// Called on the MIDI thread when an 8-quarter-frame group completes,
+    /// with the assembled timecode and the host time (seconds) of the final message.
+    var timecodeHandler: ((Timecode, Double) -> Void)?
     @Published var availableDevices: [MIDIDevice] = []
     @Published var selectedDevice: MIDIDevice? {
         didSet {
@@ -102,6 +106,7 @@ class MIDIManager: ObservableObject {
 
         for _ in 0..<packets.numPackets {
             let bytes = Mirror(reflecting: packet.data).children.map { $0.value as! UInt8 }
+            let arrival = packet.timeStamp == 0 ? HostTime.now() : HostTime.seconds(fromTicks: packet.timeStamp)
             for i in 0..<Int(packet.length) {
                 let byte = bytes[i]
 
@@ -111,6 +116,9 @@ class MIDIManager: ObservableObject {
                         let tc = parser.timecode
                         let rate = parser.frameRate
                         let assembled = parser.assembledTimecode
+                        if let assembled, let handler = timecodeHandler {
+                            handler(assembled, arrival)
+                        }
                         DispatchQueue.main.async {
                             self.timecode = tc
                             self.frameRate = rate

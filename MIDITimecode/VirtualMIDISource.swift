@@ -1,18 +1,37 @@
+import Combine
 import CoreMIDI
 import Foundation
+import os.log
 
+private let logger = Logger(subsystem: "Rob-Sinclair-Inc.MIDITimecode", category: "VirtualMIDISource")
+
+/// Publishes a virtual CoreMIDI source carrying a continuous MTC stream.
+///
+/// The stream is produced by `MTCStreamScheduler` and disciplined by whatever
+/// reference the engine feeds in (decoded LTC or incoming MTC). Packets are
+/// handed to CoreMIDI ahead of time with exact host timestamps; the MIDI
+/// server delivers them to receivers at the stamped moment.
 class VirtualMIDISource: ObservableObject {
     @Published var isActive: Bool = false
+    /// Current generator state, updated on the main thread.
+    @Published var outputState: MTCClock.State = .stopped
+
+    /// Do not rename: receivers (CuePilot) are configured against this name.
+    static let sourceName = "MIDITimecode LTC"
 
     private var midiClient: MIDIClientRef = 0
     private var virtualEndpoint: MIDIEndpointRef = 0
-    private let generator = MTCGenerator()
+    private var scheduler: MTCStreamScheduler?
+    private var configuration = MTCClock.Configuration()
 
-    private var lastSentTimecode: Timecode?
-    private var quarterFrameIndex: Int = 0
-    private var timer: DispatchSourceTimer?
-
-    static let sourceName = "MIDITimecode LTC"
+    /// Frames of missing reference tolerated before output stops.
+    var freewheelFrames: Int {
+        get { configuration.freewheelFrames }
+        set {
+            configuration.freewheelFrames = newValue
+            scheduler?.updateConfiguration(configuration)
+        }
+    }
 
     func start() {
         guard !isActive else { return }
@@ -23,7 +42,7 @@ class VirtualMIDISource: ObservableObject {
             nil
         )
         guard status == noErr else {
-            print("VirtualMIDISource: Failed to create MIDI client: \(status)")
+            logger.error("Failed to create MIDI client: \(status)")
             return
         }
 
@@ -33,16 +52,31 @@ class VirtualMIDISource: ObservableObject {
             &virtualEndpoint
         )
         guard status == noErr else {
-            print("VirtualMIDISource: Failed to create virtual source: \(status)")
+            logger.error("Failed to create virtual source: \(status)")
+            MIDIClientDispose(midiClient)
+            midiClient = 0
             return
         }
 
+        let scheduler = MTCStreamScheduler(
+            configuration: configuration,
+            send: { [weak self] bytes, time in
+                self?.sendMIDIBytes(bytes, at: time)
+            },
+            stateChanged: { [weak self] state in
+                DispatchQueue.main.async { self?.outputState = state }
+            }
+        )
+        self.scheduler = scheduler
+        scheduler.start()
+
         isActive = true
+        logger.info("Virtual source '\(Self.sourceName)' active")
     }
 
     func stop() {
-        timer?.cancel()
-        timer = nil
+        scheduler?.stop()
+        scheduler = nil
 
         if virtualEndpoint != 0 {
             MIDIEndpointDispose(virtualEndpoint)
@@ -54,74 +88,44 @@ class VirtualMIDISource: ObservableObject {
         }
 
         isActive = false
-        lastSentTimecode = nil
-        quarterFrameIndex = 0
+        outputState = .stopped
     }
 
-    /// Called when a new timecode frame is decoded. Schedules 8 quarter-frame messages
-    /// spread evenly across the frame duration for smooth MTC output.
-    func send(timecode: Timecode) {
-        guard isActive, virtualEndpoint != 0 else { return }
+    /// Discipline the stream: `position` is the frame that begins at host time `hostTime` (seconds).
+    func reference(_ position: Timecode, at hostTime: Double) {
+        scheduler?.reference(position, at: hostTime)
+    }
 
-        // Cancel any in-flight QF sequence from a previous frame
-        timer?.cancel()
-
-        lastSentTimecode = timecode
-        quarterFrameIndex = 0
-
-        // Send QF messages evenly spaced across two frame durations
-        // (MTC transmits a full timecode over 2 frames = 8 QF messages)
-        let qfInterval = timecode.rate.frameDuration / 4.0
-
-        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global(qos: .userInteractive))
-        timer.schedule(
-            deadline: .now(),
-            repeating: qfInterval,
-            leeway: .microseconds(100)
-        )
-        timer.setEventHandler { [weak self] in
-            self?.sendNextQuarterFrame()
-        }
-        timer.resume()
-        self.timer = timer
+    /// Announce a position with a Full Frame and hold the stream (reverse play).
+    func locate(_ position: Timecode, at hostTime: Double) {
+        scheduler?.locate(position, at: hostTime)
     }
 
     // MARK: - Private
 
-    private func sendNextQuarterFrame() {
-        guard let tc = lastSentTimecode, quarterFrameIndex < 8 else {
-            timer?.cancel()
-            timer = nil
-            return
-        }
-
-        let message = generator.quarterFrameMessage(index: quarterFrameIndex, timecode: tc)
-        sendMIDIBytes(message)
-        quarterFrameIndex += 1
-
-        if quarterFrameIndex >= 8 {
-            timer?.cancel()
-            timer = nil
-        }
-    }
-
-    private func sendMIDIBytes(_ bytes: [UInt8]) {
+    private func sendMIDIBytes(_ bytes: [UInt8], at hostTime: Double) {
         guard virtualEndpoint != 0 else { return }
 
-        // Build a MIDIPacketList with a single packet
         var packetList = MIDIPacketList()
         let packetListSize = MemoryLayout<MIDIPacketList>.size
-        var curPacket = MIDIPacketListInit(&packetList)
-        curPacket = MIDIPacketListAdd(
+        var packet = MIDIPacketListInit(&packetList)
+        packet = MIDIPacketListAdd(
             &packetList,
             packetListSize,
-            curPacket,
-            0, // timestamp 0 = now
+            packet,
+            HostTime.ticks(fromSeconds: hostTime),
             bytes.count,
             bytes
         )
+        guard packet != nil else {
+            logger.error("Packet list too small for \(bytes.count)-byte message")
+            return
+        }
 
-        MIDIReceived(virtualEndpoint, &packetList)
+        let status = MIDIReceived(virtualEndpoint, &packetList)
+        if status != noErr {
+            logger.error("MIDIReceived failed: \(status)")
+        }
     }
 
     deinit {

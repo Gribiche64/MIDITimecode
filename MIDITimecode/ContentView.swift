@@ -51,18 +51,8 @@ struct ContentView: View {
 
                 // Right group: Virtual MTC + Color + Pin
                 HStack(spacing: 0) {
-                    // Virtual MTC output toggle
-                    Button(action: { engine.virtualMTCEnabled.toggle() }) {
-                        HStack(spacing: 3) {
-                            Image(systemName: engine.virtualMTCEnabled ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right")
-                                .font(.system(size: 10))
-                            Text("MTC Out")
-                        }
-                        .foregroundStyle(engine.virtualMTCEnabled ? Color.orange : Color(white: 0.5))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(.horizontal, 8)
-                    .help(engine.virtualMTCEnabled ? "Virtual MTC output active" : "Enable virtual MTC output")
+                    // Virtual MTC output toggle (click) and freewheel setting (menu)
+                    mtcOutputControl
 
                     Divider()
                         .frame(height: 14)
@@ -119,6 +109,69 @@ struct ContentView: View {
             .background(Color(white: 0.14))
         }
         .background(Color.black)
+    }
+
+    // MARK: - MTC Output
+
+    private var mtcOutputControl: some View {
+        Menu {
+            Section("Freewheel on signal loss") {
+                ForEach(TimecodeEngine.freewheelChoices, id: \.self) { seconds in
+                    Button(action: { engine.freewheelSeconds = seconds }) {
+                        HStack {
+                            Text(Self.freewheelLabel(seconds))
+                            if seconds == engine.freewheelSeconds {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Image(systemName: "antenna.radiowaves.left.and.right")
+                    .font(.system(size: 10))
+                Text(mtcOutputLabel)
+            }
+            .foregroundStyle(mtcOutputColor)
+        } primaryAction: {
+            engine.virtualMTCEnabled.toggle()
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 8)
+        .help(mtcOutputHelp)
+    }
+
+    private var mtcOutputLabel: String {
+        guard engine.virtualMTCEnabled else { return "MTC Out" }
+        switch engine.mtcOutputState {
+        case .stopped: return "MTC Out"
+        case .locked: return "MTC Out"
+        case .freewheeling: return "MTC Freewheel"
+        }
+    }
+
+    private var mtcOutputColor: Color {
+        guard engine.virtualMTCEnabled else { return Color(white: 0.5) }
+        switch engine.mtcOutputState {
+        case .stopped: return Color(white: 0.7)
+        case .locked: return .orange
+        case .freewheeling: return .yellow
+        }
+    }
+
+    private var mtcOutputHelp: String {
+        guard engine.virtualMTCEnabled else { return "Enable virtual MTC output" }
+        let freewheel = Self.freewheelLabel(engine.freewheelSeconds)
+        switch engine.mtcOutputState {
+        case .stopped: return "Virtual MTC output on, waiting for timecode (freewheel \(freewheel))"
+        case .locked: return "Virtual MTC output locked to input (freewheel \(freewheel))"
+        case .freewheeling: return "Input lost, MTC freewheeling for up to \(freewheel)"
+        }
+    }
+
+    private static func freewheelLabel(_ seconds: Double) -> String {
+        seconds == seconds.rounded() ? String(format: "%.0f s", seconds) : String(format: "%.1f s", seconds)
     }
 
     // MARK: - Input Mode Picker

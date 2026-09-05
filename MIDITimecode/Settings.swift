@@ -13,7 +13,11 @@ enum Settings {
         static let tubeColor = "tubeColor"
         static let alwaysOnTop = "alwaysOnTop"
         static let virtualMTCEnabled = "virtualMTCEnabled"
+        static let freewheelSeconds = "freewheelSeconds"
     }
+
+    /// Default freewheel on loss of LTC, in seconds.
+    static let defaultFreewheelSeconds = 1.0
 
     // MARK: - Typed accessors
 
@@ -50,5 +54,14 @@ enum Settings {
     static var virtualMTCEnabled: Bool {
         get { defaults.bool(forKey: Keys.virtualMTCEnabled) }
         set { defaults.set(newValue, forKey: Keys.virtualMTCEnabled) }
+    }
+
+    static var freewheelSeconds: Double {
+        get {
+            guard defaults.object(forKey: Keys.freewheelSeconds) != nil else { return defaultFreewheelSeconds }
+            let value = defaults.double(forKey: Keys.freewheelSeconds)
+            return value > 0 ? value : defaultFreewheelSeconds
+        }
+        set { defaults.set(newValue, forKey: Keys.freewheelSeconds) }
     }
 }

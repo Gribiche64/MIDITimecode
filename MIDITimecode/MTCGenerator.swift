@@ -1,6 +1,10 @@
 import Foundation
 
+/// Byte-level MTC message formatting: quarter-frame and Full Frame messages.
 struct MTCGenerator {
+    /// Status byte of an MTC quarter-frame message.
+    static let quarterFrameStatus: UInt8 = 0xF1
+
     /// Generate the data byte for a specific quarter-frame message (0-7).
     func quarterFrameDataByte(index: Int, timecode: Timecode) -> UInt8 {
         let messageType = UInt8(index & 0x07)
@@ -30,6 +34,18 @@ struct MTCGenerator {
 
     /// Generate a full MIDI quarter-frame message [0xF1, dataByte] for a given index.
     func quarterFrameMessage(index: Int, timecode: Timecode) -> [UInt8] {
-        [0xF1, quarterFrameDataByte(index: index, timecode: timecode)]
+        [Self.quarterFrameStatus, quarterFrameDataByte(index: index, timecode: timecode)]
+    }
+
+    /// MTC Full Frame message (universal real-time SysEx):
+    /// `F0 7F 7F 01 01 hr mn sc fr F7`, where the hours byte carries the
+    /// rate code in bits 5-6. Receivers locate to this position immediately.
+    func fullFrameMessage(for timecode: Timecode) -> [UInt8] {
+        let hoursByte = (timecode.rate.mtcRateCode << 5) | (timecode.hours & 0x1F)
+        return [
+            0xF0, 0x7F, 0x7F, 0x01, 0x01,
+            hoursByte, timecode.minutes, timecode.seconds, timecode.frames,
+            0xF7,
+        ]
     }
 }

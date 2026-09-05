@@ -68,7 +68,7 @@ enum FrameRate: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-struct Timecode: Equatable, Sendable {
+struct Timecode: Hashable, Sendable {
     var hours: UInt8
     var minutes: UInt8
     var seconds: UInt8

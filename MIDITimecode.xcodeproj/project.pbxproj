@@ -28,6 +28,12 @@
 		A10019 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019; };
 		A10026 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10026; };
 		A10027 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10027; };
+		A10030 /* TimecodeMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10030; };
+		A10031 /* HostTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10031; };
+		A10032 /* MTCClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10032; };
+		A10033 /* MTCStreamScheduler.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10033; };
+		A10034 /* TimecodeMathTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10034; };
+		A10035 /* MTCClockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10035; };
 		A10020 /* MIDIManagerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10020; };
 		A10021 /* TubeColorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10021; };
 		A10022 /* MTCParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10022; };
@@ -68,6 +74,12 @@
 		B10019 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
 		B10026 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		B10027 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		B10030 /* TimecodeMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecodeMath.swift; sourceTree = "<group>"; };
+		B10031 /* HostTime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostTime.swift; sourceTree = "<group>"; };
+		B10032 /* MTCClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCClock.swift; sourceTree = "<group>"; };
+		B10033 /* MTCStreamScheduler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCStreamScheduler.swift; sourceTree = "<group>"; };
+		B10034 /* TimecodeMathTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecodeMathTests.swift; sourceTree = "<group>"; };
+		B10035 /* MTCClockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCClockTests.swift; sourceTree = "<group>"; };
 		B10020 /* MIDIManagerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MIDIManagerTests.swift; sourceTree = "<group>"; };
 		B10021 /* TubeColorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TubeColorTests.swift; sourceTree = "<group>"; };
 		B10022 /* MTCParserTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCParserTests.swift; sourceTree = "<group>"; };
@@ -123,6 +135,10 @@
 				B10018 /* TimecodeEngine.swift */,
 				B10026 /* Settings.swift */,
 				B10027 /* MenuBarController.swift */,
+				B10030 /* TimecodeMath.swift */,
+				B10031 /* HostTime.swift */,
+				B10032 /* MTCClock.swift */,
+				B10033 /* MTCStreamScheduler.swift */,
 				B10006 /* TubeColor.swift */,
 				G10003 /* Views */,
 				B10010 /* Assets.xcassets */,
@@ -150,6 +166,8 @@
 				B10023 /* TimecodeTests.swift */,
 				B10024 /* MTCGeneratorTests.swift */,
 				B10025 /* LTCDecoderTests.swift */,
+				B10034 /* TimecodeMathTests.swift */,
+				B10035 /* MTCClockTests.swift */,
 			);
 			path = MIDITimecodeTests;
 			sourceTree = "<group>";
@@ -274,6 +292,10 @@
 				A10019 /* MenuBarContentView.swift in Sources */,
 				A10026 /* Settings.swift in Sources */,
 				A10027 /* MenuBarController.swift in Sources */,
+				A10030 /* TimecodeMath.swift in Sources */,
+				A10031 /* HostTime.swift in Sources */,
+				A10032 /* MTCClock.swift in Sources */,
+				A10033 /* MTCStreamScheduler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -287,6 +309,8 @@
 				A10023 /* TimecodeTests.swift in Sources */,
 				A10024 /* MTCGeneratorTests.swift in Sources */,
 				A10025 /* LTCDecoderTests.swift in Sources */,
+				A10034 /* TimecodeMathTests.swift in Sources */,
+				A10035 /* MTCClockTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

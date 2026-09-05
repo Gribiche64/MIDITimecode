@@ -46,6 +46,22 @@ class TimecodeEngine: ObservableObject {
             toggleVirtualOutput()
         }
     }
+    /// Seconds of missing input the MTC output rides through before stopping (persisted).
+    @Published var freewheelSeconds: Double {
+        didSet {
+            Settings.freewheelSeconds = freewheelSeconds
+            applyFreewheel()
+        }
+    }
+    static let freewheelChoices: [Double] = [0.5, 1.0, 2.0, 5.0]
+
+    /// State of the virtual MTC output stream.
+    @Published var mtcOutputState: MTCClock.State = .stopped
+
+    /// Frames a completed MTC quarter-frame group lags real time.
+    private static let mtcGroupLagFrames = 2
+    /// Reference rate used to turn the freewheel setting into frames before the input rate is known.
+    private static let freewheelReferenceRate = FrameRate.fps30
 
     // Sub-managers (exposed for UI binding)
     let midiManager = MIDIManager()
@@ -60,8 +76,11 @@ class TimecodeEngine: ObservableObject {
         self.tubeColor = Settings.tubeColor
         self.alwaysOnTop = Settings.alwaysOnTop
         self.virtualMTCEnabled = Settings.virtualMTCEnabled
+        self.freewheelSeconds = Settings.freewheelSeconds
 
+        applyFreewheel()
         setupBindings()
+        setupReferenceHandlers()
         startMenuBarUpdates()
 
         // Restore device selection once devices are enumerated
@@ -201,16 +220,6 @@ class TimecodeEngine: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Forward assembled timecode to virtual MTC output (MTC mode)
-        midiManager.$latestTimecode
-            .compactMap { $0 }
-            .receive(on: RunLoop.main)
-            .sink { [weak self] tc in
-                guard let self, self.inputMode == .mtc, self.virtualMTCEnabled else { return }
-                self.virtualSource.send(timecode: tc)
-            }
-            .store(in: &cancellables)
-
         // LTC mode → forward timecode
         audioManager.$latestTimecode
             .receive(on: RunLoop.main)
@@ -218,10 +227,13 @@ class TimecodeEngine: ObservableObject {
                 guard let self, self.inputMode == .ltc else { return }
                 self.timecode = tc.displayString
                 self.frameRate = tc.rate.rawValue
+            }
+            .store(in: &cancellables)
 
-                if self.virtualMTCEnabled {
-                    self.virtualSource.send(timecode: tc)
-                }
+        virtualSource.$outputState
+            .receive(on: RunLoop.main)
+            .sink { [weak self] state in
+                self?.mtcOutputState = state
             }
             .store(in: &cancellables)
 
@@ -252,12 +264,38 @@ class TimecodeEngine: ObservableObject {
 
     // MARK: - Virtual MTC output
 
+    /// Feed the MTC generator with timestamped references from whichever
+    /// input is running. Both handlers run on their input's own thread; the
+    /// generator applies them under its own lock, so no hop to main is needed.
+    private func setupReferenceHandlers() {
+        // LTC: the decoded frame ends at `endHostTime`, so the next frame starts there.
+        audioManager.frameHandler = { [weak self] frame in
+            guard let source = self?.virtualSource else { return }
+            if frame.isReversing {
+                source.locate(frame.timecode, at: frame.endHostTime)
+            } else {
+                source.reference(frame.timecode.advanced(by: 1), at: frame.endHostTime)
+            }
+        }
+
+        // MTC in: a group completes two frames after the time it encodes.
+        midiManager.timecodeHandler = { [weak self] tc, arrival in
+            guard let self else { return }
+            self.virtualSource.reference(tc.advanced(by: Self.mtcGroupLagFrames), at: arrival)
+        }
+    }
+
     private func toggleVirtualOutput() {
         if virtualMTCEnabled {
             virtualSource.start()
         } else {
             virtualSource.stop()
         }
+    }
+
+    private func applyFreewheel() {
+        let frames = Int((freewheelSeconds / Self.freewheelReferenceRate.frameDuration).rounded())
+        virtualSource.freewheelFrames = max(1, frames)
     }
 
     // MARK: - Window
