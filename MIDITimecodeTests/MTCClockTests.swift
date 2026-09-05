@@ -25,26 +25,37 @@ final class MTCClockTests: XCTestCase {
         }
     }
 
-    /// Decode the timecode each 8-message group carries.
-    private func groupTimecodes(_ events: [MTCClock.Event]) -> [Timecode] {
+    /// Decode the timecode each 8-message group carries, with the time of its first message.
+    private func groups(_ events: [MTCClock.Event]) -> [(start: Double, timecode: Timecode)] {
         var parser = MTCParser()
-        var result: [Timecode] = []
-        for qf in quarterFrames(events) where parser.processQuarterFrame(qf.data) {
-            if let tc = parser.assembledTimecode { result.append(tc) }
+        var result: [(Double, Timecode)] = []
+        var groupStart = 0.0
+        for qf in quarterFrames(events) {
+            if qf.index == 0 { groupStart = qf.time }
+            if parser.processQuarterFrame(qf.data), let tc = parser.assembledTimecode {
+                result.append((groupStart, tc))
+            }
         }
         return result
     }
 
-    /// Feed one reference per frame, with optional per-frame time jitter, and
-    /// return everything the clock emitted up to `frames` frames plus lookahead.
+    private func groupTimecodes(_ events: [MTCClock.Event]) -> [Timecode] {
+        groups(events).map(\.timecode)
+    }
+
     /// The default horizon sits between quarter-frames so each pull returns
     /// exactly one frame's worth (4) of quarter-frames.
     private var pullHorizon: Double { frame - quarter / 2 }
 
+    /// Feed one reference per frame, with optional per-frame time jitter, and
+    /// return everything the clock emitted up to `frames` frames plus lookahead.
+    /// A priming reference one frame before `start` lets the clock confirm and
+    /// anchor the stream exactly at `start` / time 0.
     private func run(_ clock: inout MTCClock, frames: Int, jitter: (Int) -> Double = { _ in 0 },
                      lookahead: Double? = nil) -> [MTCClock.Event] {
         let lookahead = lookahead ?? pullHorizon
         var events: [MTCClock.Event] = []
+        clock.reference(start.advanced(by: -1), at: -frame)
         for n in 0..<frames {
             let t = Double(n) * frame
             clock.reference(start.advanced(by: n), at: t + jitter(n))
@@ -79,10 +90,14 @@ final class MTCClockTests: XCTestCase {
         }
     }
 
-    func testFirstLockSendsOneFullFrameBeforeTheStream() {
+    func testFirstLockNeedsTwoConsistentReferencesThenSendsOneFullFrame() {
         var clock = MTCClock()
         XCTAssertEqual(clock.state, .stopped)
         XCTAssertTrue(clock.events(until: 1.0).isEmpty, "Nothing should be emitted before a reference")
+
+        clock.reference(start.advanced(by: -1), at: -frame)
+        XCTAssertEqual(clock.state, .stopped, "One reference is not enough to lock")
+        XCTAssertTrue(clock.events(until: frame).isEmpty)
 
         clock.reference(start, at: 0)
         let events = clock.events(until: frame)
@@ -99,6 +114,7 @@ final class MTCClockTests: XCTestCase {
         var clock = MTCClock()
         var events: [MTCClock.Event] = []
         let d = FrameRate.df2997.frameDuration
+        clock.reference(dfStart.advanced(by: -1), at: -d)
         for n in 0..<20 {
             clock.reference(dfStart.advanced(by: n), at: Double(n) * d)
             events += clock.events(until: Double(n) * d + d)
@@ -166,16 +182,22 @@ final class MTCClockTests: XCTestCase {
         for pair in zip(events, events.dropFirst()) {
             XCTAssertLessThanOrEqual(pair.0.time, pair.1.time)
         }
-        // And the group after the jump encodes the stepped timeline.
-        let groups = groupTimecodes(events)
-        XCTAssertTrue(groups.contains(start.advanced(by: 40 + step)))
+        // Every group after the jump encodes the stepped timeline at its first message.
+        let afterJump = groups(events).filter { $0.start >= 33 * frame }
+        XCTAssertGreaterThan(afterJump.count, 5)
+        for group in afterJump {
+            let expected = start.advanced(by: Int((group.start / frame).rounded()) + step)
+            XCTAssertEqual(group.timecode, expected, "Group at \(group.start / frame) frames")
+        }
     }
 
     func testRateChangeReanchorsWithFullFrame() {
         var clock = MTCClock()
         _ = run(&clock, frames: 10)
         let tc25 = Timecode(hours: 1, minutes: 0, seconds: 0, frames: 0, rate: .fps25)
+        let d25 = FrameRate.fps25.frameDuration
         clock.reference(tc25, at: 10 * frame)
+        clock.reference(tc25.advanced(by: 1), at: 10 * frame + d25)
         let events = clock.events(until: 10 * frame + 0.1)
         XCTAssertEqual(clock.rate, .fps25)
         XCTAssertEqual(fullFrames(events).first?.rate, .fps25)
@@ -211,7 +233,9 @@ final class MTCClockTests: XCTestCase {
         XCTAssertLessThanOrEqual(stoppedAtFrame!, 4 + config.freewheelFrames + 1)
         XCTAssertEqual(quarterFramesWhileStopped, 0, "No quarter-frames once stopped")
 
-        // Relock: a fresh reference restarts the stream with a Full Frame.
+        // Relock: two consistent references restart the stream with a Full Frame.
+        clock.reference(start.advanced(by: 39), at: 39.0 * frame)
+        XCTAssertEqual(clock.state, .stopped, "A single reference must not relock")
         let relockTime = 40.0 * frame
         let relock = start.advanced(by: 40)
         clock.reference(relock, at: relockTime)
@@ -232,6 +256,48 @@ final class MTCClockTests: XCTestCase {
         XCTAssertEqual(fullFrames(events), [position])
         XCTAssertTrue(quarterFrames(events).allSatisfy { $0.time < 6 * frame },
                       "No quarter-frames may be scheduled after a locate")
+    }
+
+    func testSingleCorruptReferenceIsIgnored() {
+        var clock = MTCClock()
+        var events = run(&clock, frames: 30)
+        XCTAssertEqual(clock.jumpCount, 1)
+
+        // One garbage frame in the middle of a good stream (what a decoder
+        // re-bootstrapping after a dropout can produce).
+        let garbage = Timecode(hours: 11, minutes: 0, seconds: 8, frames: 11, rate: .fps30)
+        clock.reference(garbage, at: 30 * frame)
+        events += clock.events(until: 30 * frame + pullHorizon)
+        for n in 31..<60 {
+            let t = Double(n) * frame
+            clock.reference(start.advanced(by: n), at: t)
+            events += clock.events(until: t + pullHorizon)
+        }
+
+        XCTAssertEqual(clock.jumpCount, 1, "A lone outlier must not re-anchor the stream")
+        XCTAssertEqual(fullFrames(events).count, 1)
+        XCTAssertEqual(clock.state, .locked)
+        let qfs = quarterFrames(events)
+        for (i, qf) in qfs.enumerated() {
+            XCTAssertEqual(qf.index, i % 8, "Quarter-frame sequence restarted at message \(i)")
+        }
+        XCTAssertFalse(groupTimecodes(events).contains { $0.hours == 11 })
+        XCTAssertEqual(clock.predictedFrameIndex(at: 60 * frame)!,
+                       Double(start.advanced(by: 60).frameIndex), accuracy: 0.1)
+    }
+
+    func testTwoConsistentReferencesAfterStepJumpOnce() {
+        var clock = MTCClock()
+        _ = run(&clock, frames: 10)
+        // Step of 5 frames, then an inconsistent frame, then a consistent pair.
+        clock.reference(start.advanced(by: 15), at: 10 * frame)
+        XCTAssertEqual(clock.jumpCount, 1)
+        clock.reference(start.advanced(by: 200), at: 11 * frame)
+        XCTAssertEqual(clock.jumpCount, 1, "Two disagreeing outliers must not jump")
+        clock.reference(start.advanced(by: 201), at: 12 * frame)
+        XCTAssertEqual(clock.jumpCount, 2, "A confirmed new timeline jumps once")
+        XCTAssertEqual(clock.predictedFrameIndex(at: 12 * frame)!,
+                       Double(start.advanced(by: 201).frameIndex), accuracy: 1e-6)
     }
 
     func testStopClearsPendingAndState() {

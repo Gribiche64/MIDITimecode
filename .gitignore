@@ -8,3 +8,9 @@ xcuserdata/
 *.swp
 *.swo
 *~
+*.log
+.env
+*.xcresult
+timeline.xctimeline
+playground.xcworkspace
+*.profraw

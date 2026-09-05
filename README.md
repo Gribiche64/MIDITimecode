@@ -1,54 +1,127 @@
 # MIDITimecode
 
-A macOS app that displays MIDI Timecode (MTC) with a nixie/valve tube aesthetic. Useful as a timecode reference display during music production, post-production, or live performance.
+A macOS app that turns LTC (audio timecode) from an audio interface into a
+virtual MIDI Timecode (MTC) source, and displays the running timecode in a
+nixie/valve tube style. In production it is the timecode bridge into CuePilot:
+LTC in on an audio input, MTC out on the virtual CoreMIDI source
+**"MIDITimecode LTC"**.
+
+It can also run as a plain MTC display, reading quarter-frame messages from any
+MIDI source, and in that mode it re-transmits a clean MTC stream on the same
+virtual source.
 
 ## Features
 
-- Receives MIDI Timecode (MTC) quarter-frame messages from any connected MIDI source
-- Displays HH:MM:SS:FF in a glowing valve tube style
-- 6 tube color themes: Blue, Cyan, Green, Orange, Purple, Rainbow
-- Optional always-on-top mode (pin toggle in settings bar)
-- Resizable window with locked aspect ratio — digits scale to fill
-- Hidden title bar, movable by clicking anywhere on the window
-- Auto-detects connected MIDI devices with rescan option
-- Displays detected frame rate (24, 25, 29.97 DF, 30 fps)
+- **LTC decoder**: biphase-mark decoding of SMPTE/EBU timecode from any audio
+  input channel, 24 / 25 / 30 fps and 29.97 drop-frame (from the drop-frame
+  flag). Signal level, lock and reverse-play indication.
+- **Disciplined MTC generator**: a free-running quarter-frame stream (4 per
+  frame, 8-message groups advancing by 2 frames) that is steered by the decoded
+  LTC the way a hardware converter works. Decoded frames are timestamped on the
+  host clock from the audio buffer time and the sample at which the sync word
+  ended, so timing does not depend on when the audio buffer happened to arrive.
+  - Errors under one frame are slewed out gradually; larger errors re-anchor
+    the stream at the next frame boundary and send an MTC Full Frame so the
+    receiver relocates at once.
+  - A re-anchor needs two consecutive, consistent frames, so a single corrupt
+    decode cannot move the output.
+  - On loss of signal the stream freewheels for a configurable time (0.5 s to
+    5 s, default 1 s), then stops. Relock sends a Full Frame and resumes.
+  - Messages are handed to CoreMIDI ahead of time with exact host timestamps;
+    the MIDI server delivers them to receivers at the stamped moment.
+- **MTC input mode** for use as a display, with pass-through to the virtual
+  source via the same generator.
+- Valve-tube display with six colour themes, always-on-top, resizable with a
+  locked aspect ratio, menu bar timecode readout.
+- Settings (mode, devices, channel, colour, MTC output, freewheel) persist
+  between launches.
 
 ## Requirements
 
 - macOS 14.0+
-- Xcode 16.0+
-- A MIDI source sending MTC (DAW, hardware transport, etc.)
+- Xcode 16.0+ to build
+- For LTC: an audio input carrying timecode (interface channel, or a loopback
+  device such as BlackHole for testing)
+- For MTC display mode: a MIDI source sending MTC
 
 ## Build
-
-Open the project in Xcode:
 
 ```bash
 open MIDITimecode.xcodeproj
 ```
 
-Then build and run (Cmd+R).
-
-Or build from the command line:
+Then build and run (Cmd+R). From the command line:
 
 ```bash
 xcodebuild -project MIDITimecode.xcodeproj -scheme MIDITimecode -configuration Release build
 ```
 
-## Usage
+Run the unit tests:
 
-1. Launch MIDITimecode
-2. Connect a MIDI device that sends MTC (or configure your DAW to output MTC)
-3. Select the MIDI source from the dropdown in the settings bar
-4. Press play in your DAW — the timecode display updates in real time
-5. Change the tube color from the Color dropdown
-6. Toggle the pin icon to keep the window always on top
-7. Resize the window by dragging any edge — aspect ratio is locked
+```bash
+xcodebuild test -project MIDITimecode.xcodeproj -scheme MIDITimecode -destination 'platform=macOS'
+```
+
+If a copy of the app is already running (the installed one, for instance),
+the test host shares its bundle identifier and the test runner can hang
+"before establishing connection". Give the test build its own identifier:
+
+```bash
+xcodebuild test -project MIDITimecode.xcodeproj -scheme MIDITimecode -destination 'platform=macOS' 'PRODUCT_BUNDLE_IDENTIFIER=Rob-Sinclair-Inc.$(TARGET_NAME).dev'
+```
+
+## Usage: LTC in, MTC out
+
+1. Launch MIDITimecode and pick **LTC** in the mode menu.
+2. Choose the audio device and the channel carrying timecode.
+3. Turn on **MTC Out**. The label shows the generator state: orange when
+   locked, yellow while freewheeling after signal loss, grey while waiting.
+   Click and hold (or right-click) the label to set the freewheel time.
+4. In the receiving application, select the MIDI source
+   **"MIDITimecode LTC"** as its MTC input. In CuePilot: Setup → Timecode,
+   source MTC, device "MIDITimecode LTC".
+
+## Usage: MTC display
+
+1. Pick **MTC** in the mode menu and choose the MIDI source.
+2. Press play in the sending application; the display follows.
+
+## Frame rates
+
+The frame rate is measured from the LTC bit period, and the drop-frame flag
+selects 29.97 DF. 30 fps and 29.97 fps non-drop have the same bit pattern and
+cannot be told apart from LTC alone; both are reported and sent as 30 fps,
+which is what the rate code in MTC expects for either.
+
+## Testing against a real signal
+
+A test build can publish under a different source name so it can run beside
+the production copy without receivers picking it up:
+
+```bash
+MIDITIMECODE_SOURCE_NAME="MIDITimecode LTC dev" /path/to/MIDITimecode.app/Contents/MacOS/MIDITimecode
+```
+
+Play an LTC file into a loopback device (for example BlackHole) and read the
+MTC with a second receiver (a DAW, or this app in MTC mode on another machine).
+
+## Project layout
+
+- `LTCDecoder.swift`: pure biphase-mark decoder; reports each frame with the
+  buffer offset of its last sample.
+- `AudioManager.swift`: audio input tap; timestamps decoded frames on the host
+  clock.
+- `MTCClock.swift`: pure model of the disciplined quarter-frame stream.
+- `MTCStreamScheduler.swift`: real-time thread that runs the clock and hands
+  timestamped messages to CoreMIDI.
+- `VirtualMIDISource.swift`: the virtual CoreMIDI source.
+- `TimecodeMath.swift`: frame-index arithmetic including drop-frame.
+- `MTCGenerator.swift`, `MTCParser.swift`: MTC byte formats.
+- `TimecodeEngine.swift`: wires inputs, generator, settings and UI.
+- `MIDITimecodeTests/`: XCTest suite for the decoder, timecode math, the
+  clock model and the MTC formats.
 
 ## Dependencies
 
-None — uses only Apple system frameworks:
-- CoreMIDI (MIDI communication)
-- SwiftUI (UI)
-- Combine (reactive state)
-- AppKit (window configuration)
+None beyond Apple frameworks: AVFoundation and CoreAudio (audio input),
+CoreMIDI, SwiftUI, Combine, AppKit.

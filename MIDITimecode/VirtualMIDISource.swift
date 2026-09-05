@@ -17,7 +17,19 @@ class VirtualMIDISource: ObservableObject {
     @Published var outputState: MTCClock.State = .stopped
 
     /// Do not rename: receivers (CuePilot) are configured against this name.
-    static let sourceName = "MIDITimecode LTC"
+    static let defaultSourceName = "MIDITimecode LTC"
+
+    /// Environment variable that overrides the source name, so a test build
+    /// can run beside the production app without receivers picking it up.
+    static let sourceNameOverrideKey = "MIDITIMECODE_SOURCE_NAME"
+
+    static var sourceName: String {
+        if let override = ProcessInfo.processInfo.environment[sourceNameOverrideKey],
+           !override.isEmpty {
+            return override
+        }
+        return defaultSourceName
+    }
 
     private var midiClient: MIDIClientRef = 0
     private var virtualEndpoint: MIDIEndpointRef = 0

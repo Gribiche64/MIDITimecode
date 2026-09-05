@@ -68,6 +68,10 @@ struct LTCDecoder {
     // Dropout detection
     private var samplesSinceLastCrossing: Int = 0
     private let dropoutThresholdMultiplier: Double = 3.0
+    /// True until the first transition after start-up or a dropout. The
+    /// interval leading up to that transition is silence, not a bit cell, so
+    /// it must not feed the bit-period estimate.
+    private var awaitingFirstCrossing: Bool = true
 
     // Forward sync word: 0011 1111 1111 1101 (SMPTE, MSB-first in temporal order)
     // In our buffer (newest at LSB), this appears as 0x3FFD in bitsLow[15..0].
@@ -111,11 +115,13 @@ struct LTCDecoder {
         sampleCounter += 1
         samplesSinceLastCrossing += 1
 
-        // Dropout detection
+        // Dropout detection: no transition for several bit periods means the
+        // signal is gone. Re-bootstrap from scratch when it returns rather than
+        // shifting stale bits and a stale bit period into the next frames.
         if estimatedBitPeriod > 0 {
             let maxSamples = Int(estimatedBitPeriod * dropoutThresholdMultiplier)
             if samplesSinceLastCrossing > maxSamples {
-                isLocked = false
+                handleDropout()
             }
         }
 
@@ -144,6 +150,12 @@ struct LTCDecoder {
         // We have a zero crossing
         let interval = samplesSinceLastCrossing
         samplesSinceLastCrossing = 0
+
+        // The first transition after silence only tells us the signal is back.
+        if awaitingFirstCrossing {
+            awaitingFirstCrossing = false
+            return nil
+        }
 
         // Reject spurious crossings (e.g., silence-to-signal transition).
         // Real biphase intervals at any standard rate/sample rate are at least ~10 samples.
@@ -237,26 +249,44 @@ struct LTCDecoder {
         let forwardErrors = popcount(syncCandidate ^ Self.syncWordForward)
         let reverseErrors = popcount(syncCandidate ^ Self.syncWordReverse)
 
+        let reversed: Bool
         if forwardErrors <= 1 {
-            isReversing = false
-            isLocked = true
-            bitsSinceLastSync = 0
-            softResyncFired = false
-            return parseFrame(reversed: false)
+            reversed = false
         } else if reverseErrors <= 1 {
-            isReversing = true
-            isLocked = true
-            bitsSinceLastSync = 0
-            softResyncFired = false
-            return parseFrame(reversed: true)
+            reversed = true
+        } else {
+            return nil
         }
 
-        return nil
+        // A sync match on a frame with impossible field values is noise.
+        guard let tc = parseFrame(reversed: reversed) else { return nil }
+        isReversing = reversed
+        isLocked = true
+        bitsSinceLastSync = 0
+        softResyncFired = false
+        lastTimecode = tc
+        return tc
+    }
+
+    /// Forget everything about the signal after a dropout so decoding
+    /// restarts cleanly when it returns.
+    private mutating func handleDropout() {
+        isLocked = false
+        hasPendingBit = false
+        estimatedBitPeriod = 0.0
+        bootstrapCount = 0
+        bitsLow = 0
+        bitsHigh = 0
+        totalBitsReceived = 0
+        bitsSinceLastSync = 0
+        softResyncFired = false
+        awaitingFirstCrossing = true
     }
 
     // MARK: - Frame parsing
 
-    private mutating func parseFrame(reversed: Bool) -> Timecode {
+    /// Returns nil when any field is outside its legal range.
+    private func parseFrame(reversed: Bool) -> Timecode? {
         // Extract the 64 data bits (LTC bits 0-63).
         // In the buffer: bitsHigh holds bits 0-15, bitsLow >> 16 holds bits 16-63.
         // But bit ordering is reversed (bit 0 is at MSB side of the combined value).
@@ -321,16 +351,18 @@ struct LTCDecoder {
             rate = .df2997
         }
 
-        let tc = Timecode(
+        guard totalHours <= 23, totalMinutes <= 59, totalSeconds <= 59,
+              totalFrames <= rate.maxFrames else {
+            return nil
+        }
+
+        return Timecode(
             hours: totalHours,
-            minutes: min(totalMinutes, 59),
-            seconds: min(totalSeconds, 59),
+            minutes: totalMinutes,
+            seconds: totalSeconds,
             frames: totalFrames,
             rate: rate
         )
-
-        lastTimecode = tc
-        return tc
     }
 
     // MARK: - Utilities
@@ -377,5 +409,6 @@ struct LTCDecoder {
         samplesSinceLastCrossing = 0
         bitsSinceLastSync = 0
         softResyncFired = false
+        awaitingFirstCrossing = true
     }
 }

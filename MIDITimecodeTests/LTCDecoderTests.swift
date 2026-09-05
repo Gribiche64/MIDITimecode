@@ -344,6 +344,62 @@ final class LTCDecoderTests: XCTestCase {
         XCTAssertEqual(viaProcess, viaDecode.map(\.timecode))
     }
 
+    // MARK: - Dropout recovery
+
+    func testRelocksQuicklyAfterSilenceWithoutSpuriousFrames() {
+        let fps = 30
+        let sampleRate = 48000.0
+        let base = Timecode(hours: 4, minutes: 20, seconds: 0, frames: 1, rate: .fps30)
+        var decoder = LTCDecoder()
+        var samples: [Float] = []
+        var valid = Set<Timecode>()
+
+        func append(_ range: Range<Int>) {
+            for n in range {
+                let tc = base.advanced(by: n)
+                valid.insert(tc)
+                samples += synthesiseLTCFrame(hours: tc.hours, minutes: tc.minutes, seconds: tc.seconds,
+                                              frames: tc.frames, sampleRate: sampleRate, fps: fps)
+            }
+        }
+        append(0..<15)
+        let silenceStart = samples.count
+        samples += [Float](repeating: 0, count: Int(sampleRate * 0.5))
+        let resume = samples.count
+        append(30..<60)
+
+        var decoded: [DecodedLTCFrame] = []
+        samples.withUnsafeBufferPointer { buffer in
+            decoded = decoder.decode(buffer, sampleRate: sampleRate)
+        }
+
+        for frame in decoded {
+            XCTAssertTrue(valid.contains(frame.timecode), "Spurious frame \(frame.timecode.displayString)")
+            XCTAssertFalse(frame.sampleOffset > silenceStart && frame.sampleOffset < resume,
+                           "Frame reported during silence")
+        }
+        guard let firstAfter = decoded.first(where: { $0.sampleOffset >= resume }) else {
+            return XCTFail("Never relocked after the dropout")
+        }
+        let frameLength = Int(sampleRate) / fps
+        let relockFrames = Double(firstAfter.sampleOffset - resume) / Double(frameLength)
+        XCTAssertLessThanOrEqual(relockFrames, 3.0, "Relock took \(relockFrames) frames")
+        XCTAssertEqual(decoded.last?.timecode, base.advanced(by: 58))
+    }
+
+    func testRejectsFramesWithImpossibleFieldValues() {
+        var decoder = LTCDecoder()
+        // Frame number 29 cannot exist at 25 fps; the sync word is still valid.
+        // (The frame-tens field is two bits, so 29 is the largest encodable value.)
+        let samples = synthesiseWithPreamble(hours: 1, minutes: 2, seconds: 3, frames: 29, fps: 25)
+        var decoded: [Timecode] = []
+        samples.withUnsafeBufferPointer { buffer in
+            decoded = decoder.processSamples(buffer, sampleRate: 48000)
+        }
+        XCTAssertTrue(decoded.isEmpty, "Decoded \(decoded.map(\.displayString))")
+        XCTAssertFalse(decoder.isLocked)
+    }
+
     // MARK: - Lock State
 
     func testIsLockedAfterDecode() {

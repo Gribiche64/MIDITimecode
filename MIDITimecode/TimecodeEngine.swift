@@ -278,10 +278,13 @@ class TimecodeEngine: ObservableObject {
             }
         }
 
-        // MTC in: a group completes two frames after the time it encodes.
+        // MTC in: a group encodes the time of its first message and its last
+        // message arrives 1.75 frames later, so the frame two ahead of the
+        // encoded value starts one quarter-frame after that arrival.
         midiManager.timecodeHandler = { [weak self] tc, arrival in
             guard let self else { return }
-            self.virtualSource.reference(tc.advanced(by: Self.mtcGroupLagFrames), at: arrival)
+            let quarter = tc.rate.frameDuration / Double(MTCClock.quarterFramesPerFrame)
+            self.virtualSource.reference(tc.advanced(by: Self.mtcGroupLagFrames), at: arrival + quarter)
         }
     }
 

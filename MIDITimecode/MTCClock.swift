@@ -15,6 +15,9 @@ import Foundation
 /// - Small reference errors (under `jumpThresholdFrames`) slew the phase
 ///   gradually; larger ones re-anchor the stream at the next frame boundary
 ///   and precede it with an MTC Full Frame so receivers relocate at once.
+/// - A reference that would re-anchor the stream is held until a second,
+///   consistent reference confirms it, so one corrupt frame cannot move the
+///   output. Lock and relock therefore take two reference frames.
 /// - With no reference the stream freewheels for `freewheelFrames`, then stops.
 struct MTCClock {
     enum State: String, Equatable, Sendable {
@@ -45,11 +48,17 @@ struct MTCClock {
         /// Largest phase correction (frames) applied per reference frame.
         var maxSlewPerFrame: Double = 0.1
         /// Frames of missing reference before the state reports freewheeling.
-        var freewheelReportAfterFrames: Double = 2.0
+        /// Messages are generated up to a frame ahead and references arrive an
+        /// audio buffer late, so anything under ~3 frames is normal operation.
+        var freewheelReportAfterFrames: Double = 4.0
     }
 
     static let quarterFramesPerFrame = 4
     static let quarterFramesPerGroup = 8
+    /// How closely a second reference must agree with a pending re-anchor.
+    static let confirmationToleranceFrames = 0.75
+    /// A pending re-anchor older than this is discarded rather than confirmed.
+    static let confirmationMaxSpanFrames = 4.0
     /// Gap between a Full Frame and the quarter-frame that follows it.
     static let fullFrameLeadSeconds = 0.002
 
@@ -69,6 +78,7 @@ struct MTCClock {
     private var lastDispatchedTime = 0.0
     private var lastReferenceTime: Double?
     private var pending: [Event] = []
+    private var candidate: (index: Int, time: Double, rate: FrameRate)?
 
     init(configuration: Configuration = Configuration()) {
         self.configuration = configuration
@@ -80,24 +90,34 @@ struct MTCClock {
     mutating func reference(_ position: Timecode, at time: Double) {
         let targetIndex = position.frameIndex
 
-        guard state != .stopped, let currentRate = rate, currentRate == position.rate,
-              let predicted = predictedFrameIndex(at: time) else {
-            jump(to: targetIndex, rate: position.rate, at: time)
-            return
+        if state != .stopped, let currentRate = rate, currentRate == position.rate,
+           let predicted = predictedFrameIndex(at: time) {
+            let error = Double(targetIndex) - predicted
+            if abs(error) < configuration.jumpThresholdFrames {
+                let correction = max(-configuration.maxSlewPerFrame,
+                                     min(configuration.maxSlewPerFrame, error * configuration.slewGain))
+                // A positive error means the reference is ahead: bring the stream forward.
+                nextQuarterFrameTime -= correction * currentRate.frameDuration
+                lastReferenceTime = time
+                state = .locked
+                candidate = nil
+                return
+            }
         }
 
-        let error = Double(targetIndex) - predicted
-        if abs(error) >= configuration.jumpThresholdFrames {
-            jump(to: targetIndex, rate: currentRate, at: time)
-            return
+        // This reference wants a re-anchor. Only act once a second reference
+        // continues the same timeline; a lone outlier is dropped.
+        let duration = position.rate.frameDuration
+        if let candidate, candidate.rate == position.rate, time > candidate.time,
+           time - candidate.time <= Self.confirmationMaxSpanFrames * duration {
+            let predicted = Double(candidate.index) + (time - candidate.time) / duration
+            if abs(Double(targetIndex) - predicted) <= Self.confirmationToleranceFrames {
+                self.candidate = nil
+                jump(to: targetIndex, rate: position.rate, at: time)
+                return
+            }
         }
-
-        let correction = max(-configuration.maxSlewPerFrame,
-                             min(configuration.maxSlewPerFrame, error * configuration.slewGain))
-        // A positive error means the reference is ahead: bring the stream forward.
-        nextQuarterFrameTime -= correction * currentRate.frameDuration
-        lastReferenceTime = time
-        state = .locked
+        candidate = (targetIndex, time, position.rate)
     }
 
     /// Stop the quarter-frame stream and announce `position` with a Full Frame.
@@ -106,6 +126,7 @@ struct MTCClock {
         state = .stopped
         rate = position.rate
         lastReferenceTime = nil
+        candidate = nil
         let at = max(time, lastDispatchedTime)
         pending.append(Event(time: at, message: .fullFrame(position),
                              bytes: generator.fullFrameMessage(for: position)))
@@ -115,6 +136,7 @@ struct MTCClock {
     mutating func stop() {
         state = .stopped
         lastReferenceTime = nil
+        candidate = nil
         pending.removeAll()
     }
 
