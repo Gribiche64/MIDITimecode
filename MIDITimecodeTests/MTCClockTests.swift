@@ -6,7 +6,7 @@ final class MTCClockTests: XCTestCase {
     private let rate = FrameRate.fps30
     private var frame: Double { rate.frameDuration }
     private var quarter: Double { rate.frameDuration / 4 }
-    private let start = Timecode(hours: 4, minutes: 20, seconds: 0, frames: 1, rate: .fps30)
+    private let start = Timecode(hours: 4, minutes: 20, seconds: 0, frames: 2, rate: .fps30)
     private let generator = MTCGenerator()
 
     // MARK: - Helpers
@@ -298,6 +298,32 @@ final class MTCClockTests: XCTestCase {
         XCTAssertEqual(clock.jumpCount, 2, "A confirmed new timeline jumps once")
         XCTAssertEqual(clock.predictedFrameIndex(at: 12 * frame)!,
                        Double(start.advanced(by: 201).frameIndex), accuracy: 1e-6)
+    }
+
+    func testGroupsStartOnEvenFramesAtThirtyFps() {
+        var clock = MTCClock()
+        let odd = Timecode(hours: 4, minutes: 20, seconds: 0, frames: 1, rate: .fps30)
+        clock.reference(odd.advanced(by: -1), at: -frame)
+        clock.reference(odd, at: 0)
+        var events = clock.events(until: 2 * frame + pullHorizon)
+        for n in 1...4 {
+            clock.reference(odd.advanced(by: n), at: Double(n) * frame)
+            events += clock.events(until: Double(n) * frame + pullHorizon)
+        }
+        let first = groups(events).first
+        XCTAssertEqual(first?.timecode, odd.advanced(by: 1), "Stream should start on the next even frame")
+        XCTAssertEqual(first?.start ?? -1, frame, accuracy: 1e-9)
+        XCTAssertTrue(groupTimecodes(events).allSatisfy { $0.frames % 2 == 0 })
+    }
+
+    func testGroupsMayStartOnOddFramesAtTwentyFiveFps() {
+        var clock = MTCClock()
+        let odd = Timecode(hours: 1, minutes: 0, seconds: 0, frames: 1, rate: .fps25)
+        let d = FrameRate.fps25.frameDuration
+        clock.reference(odd.advanced(by: -1), at: -d)
+        clock.reference(odd, at: 0)
+        let events = clock.events(until: 2 * d)
+        XCTAssertEqual(groups(events).first?.timecode, odd)
     }
 
     func testStopClearsPendingAndState() {

@@ -221,12 +221,19 @@ struct MTCClock {
 
     /// Re-anchor the stream so that frame `targetIndex` starts at `time`.
     /// Messages already dispatched cannot be recalled, so the new stream begins
-    /// at the first frame boundary after the last dispatched message.
+    /// at the first frame boundary after the last dispatched message. At rates
+    /// with an even frame count (24, 30, 29.97) the first message of a group
+    /// is placed on an even frame number, as the MTC specification describes
+    /// and as hardware converters do.
     private mutating func jump(to targetIndex: Int, rate newRate: FrameRate, at time: Double) {
         let duration = newRate.frameDuration
         var framesAhead = 0
         if lastDispatchedTime > time {
             framesAhead = Int(((lastDispatchedTime - time) / duration).rounded(.up))
+        }
+        if newRate.nominalFPS % 2 == 0,
+           Timecode(frameIndex: targetIndex + framesAhead, rate: newRate).frames % 2 == 1 {
+            framesAhead += 1
         }
         let startTime = time + Double(framesAhead) * duration
         let startIndex = targetIndex + framesAhead

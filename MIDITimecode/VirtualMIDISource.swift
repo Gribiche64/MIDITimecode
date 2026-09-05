@@ -70,6 +70,8 @@ class VirtualMIDISource: ObservableObject {
             return
         }
         applyPersistentUniqueID()
+        MIDIObjectSetStringProperty(virtualEndpoint, kMIDIPropertyManufacturer, "Rob Sinclair Inc" as CFString)
+        MIDIObjectSetStringProperty(virtualEndpoint, kMIDIPropertyModel, "MIDITimecode" as CFString)
 
         let scheduler = MTCStreamScheduler(
             configuration: configuration,
