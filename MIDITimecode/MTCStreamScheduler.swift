@@ -4,20 +4,25 @@ import os
 /// Runs an `MTCClock` on a dedicated real-time thread and hands each message
 /// to a sender ahead of its due time, stamped with the exact host time.
 ///
-/// The thread wakes shortly before each quarter-frame is due, pulls every
-/// message due within `lookahead`, and sleeps again with `mach_wait_until`.
+/// The thread wakes when each quarter-frame is due, hands it to CoreMIDI
+/// stamped with its due time, and sleeps again with `mach_wait_until`.
 /// Reference updates arrive from other threads (the audio tap or the MIDI
 /// input callback) and are applied under a lock.
+///
+/// Messages are deliberately not scheduled ahead with future timestamps.
+/// CoreMIDI would honour them, but WebMIDI hosts (CuePilot runs on Chromium)
+/// and hardware-style receivers expect messages to arrive when they happen;
+/// sending at the due time from a real-time thread keeps delivery within a
+/// fraction of a millisecond without relying on the receiver's handling of
+/// timestamps.
 final class MTCStreamScheduler {
     typealias Sender = (_ bytes: [UInt8], _ hostTimeSeconds: Double) -> Void
 
-    /// How far ahead messages are handed to CoreMIDI. One frame keeps timing
-    /// tight while leaving enough slack for thread wake-up jitter.
-    static let lookaheadFrames = 1.0
+    /// Messages due within this window of now are sent immediately; it only
+    /// absorbs thread wake-up jitter.
+    static let lookaheadSeconds = 0.0005
     /// Upper bound on one sleep, so stop requests and re-anchors are noticed promptly.
     static let maxSleepSeconds = 0.015
-    /// Lookahead used before the rate is known.
-    static let defaultLookaheadSeconds = 1.0 / 25.0
 
     private let clock: OSAllocatedUnfairLock<MTCClock>
     private let send: Sender
@@ -80,11 +85,9 @@ final class MTCStreamScheduler {
 
         while running.withLock({ $0 }) {
             let now = HostTime.now()
-            let (events, nextDue, state, lookahead) = clock.withLock { clock -> ([MTCClock.Event], Double?, MTCClock.State, Double) in
-                let frame = clock.rate?.frameDuration ?? Self.defaultLookaheadSeconds
-                let lookahead = frame * Self.lookaheadFrames
-                let events = clock.events(until: now + lookahead)
-                return (events, clock.nextEventTime, clock.state, lookahead)
+            let (events, nextDue, state) = clock.withLock { clock -> ([MTCClock.Event], Double?, MTCClock.State) in
+                let events = clock.events(until: now + Self.lookaheadSeconds)
+                return (events, clock.nextEventTime, clock.state)
             }
 
             for event in events {
@@ -94,7 +97,7 @@ final class MTCStreamScheduler {
 
             var wake = now + Self.maxSleepSeconds
             if let nextDue {
-                wake = min(wake, nextDue - lookahead)
+                wake = min(wake, nextDue)
             }
             if wake > now {
                 mach_wait_until(HostTime.ticks(fromSeconds: wake))

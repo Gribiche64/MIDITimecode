@@ -20,7 +20,8 @@
 - Configurable freewheel on signal loss (0.5 s to 5 s, default 1 s), then
   stop; generator state shown in the settings bar and menu bar.
 - Re-anchors require two consecutive consistent frames.
-- MIDI packets carry exact host timestamps and are scheduled one frame ahead.
+- MIDI packets are sent from a real-time thread when due and carry exact
+  host timestamps.
 - `MIDITIMECODE_SOURCE_NAME` environment override for test builds.
 - Tests: MTC clock stream shape, drop-frame counting, jitter convergence,
   step response, corrupt-frame rejection, freewheel/stop/relock; decoder sample

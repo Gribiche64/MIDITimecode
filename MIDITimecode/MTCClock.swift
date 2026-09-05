@@ -48,8 +48,8 @@ struct MTCClock {
         /// Largest phase correction (frames) applied per reference frame.
         var maxSlewPerFrame: Double = 0.1
         /// Frames of missing reference before the state reports freewheeling.
-        /// Messages are generated up to a frame ahead and references arrive an
-        /// audio buffer late, so anything under ~3 frames is normal operation.
+        /// References arrive an audio buffer late (up to a few frames on
+        /// large-buffer interfaces), so this must not be too tight.
         var freewheelReportAfterFrames: Double = 4.0
     }
 

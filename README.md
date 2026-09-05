@@ -27,8 +27,9 @@ virtual source.
     decode cannot move the output.
   - On loss of signal the stream freewheels for a configurable time (0.5 s to
     5 s, default 1 s), then stops. Relock sends a Full Frame and resumes.
-  - Messages are handed to CoreMIDI ahead of time with exact host timestamps;
-    the MIDI server delivers them to receivers at the stamped moment.
+  - Messages are sent from a real-time thread at the moment they are due,
+    stamped with that time, so receivers that ignore timestamps (WebMIDI
+    hosts such as CuePilot) still get them on time.
 - **MTC input mode** for use as a display, with pass-through to the virtual
   source via the same generator.
 - Valve-tube display with six colour themes, always-on-top, resizable with a
