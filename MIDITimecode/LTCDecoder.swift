@@ -44,6 +44,14 @@ struct LTCDecoder {
     private var peakLevel: Float = 0.0
     private var schmittHigh: Bool = false  // current polarity state
 
+    // Plausible LTC bit rates: 24 fps × 80 bits = 1920 bit/s up to 30 fps × 80 =
+    // 2400 bit/s, with headroom for shuttle speeds. Anything faster is noise.
+    private static let maxPlausibleBitRate: Double = 2400.0 * 2.5
+    private static let minPlausibleBitRate: Double = 1920.0 / 2.5
+    /// Frame durations the timing must fall within to be reported (20 to 36 fps
+    /// nominal, plus a little tolerance).
+    private static let plausibleFrameDuration: ClosedRange<Double> = (1.0 / 36.0)...(1.0 / 20.0)
+
     // Bit period tracking
     private var estimatedBitPeriod: Double = 0.0
     private var hasPendingBit: Bool = false
@@ -157,9 +165,10 @@ struct LTCDecoder {
             return nil
         }
 
-        // Reject spurious crossings (e.g., silence-to-signal transition).
-        // Real biphase intervals at any standard rate/sample rate are at least ~10 samples.
-        guard interval > 4 else { return nil }
+        // Reject crossings faster than half a bit cell at the fastest plausible
+        // LTC rate: those are noise, not biphase transitions.
+        let minHalfBitSamples = sampleRate / Self.maxPlausibleBitRate / 2.0
+        guard Double(interval) >= minHalfBitSamples else { return nil }
 
         // Bootstrap: collect the first few intervals to find the full bit period.
         // The longest interval in any biphase mark signal is exactly one bit period.
@@ -168,6 +177,11 @@ struct LTCDecoder {
                 estimatedBitPeriod = Double(interval)
             }
             bootstrapCount += 1
+            if bootstrapCount == bootstrapTarget, !isPlausibleBitPeriod(estimatedBitPeriod) {
+                // Whatever this is, it is not timecode. Start again.
+                estimatedBitPeriod = 0.0
+                bootstrapCount = 0
+            }
             return nil
         }
 
@@ -175,7 +189,11 @@ struct LTCDecoder {
         // was probably from a half-bit. Reset to this longer interval.
         let ratio = Double(interval) / estimatedBitPeriod
         if ratio > 1.7 {
-            estimatedBitPeriod = Double(interval)
+            if isPlausibleBitPeriod(Double(interval)) {
+                estimatedBitPeriod = Double(interval)
+            } else {
+                handleDropout()
+            }
             hasPendingBit = false
             return nil
         }
@@ -244,15 +262,18 @@ struct LTCDecoder {
         guard totalBitsReceived >= 80 else { return nil }
 
         // The sync word (LTC bits 64-79) occupies the lowest 16 bits of bitsLow.
-        // Allow up to 1 bit error to handle minor decoder slips on real-world signals.
+        // Once locked, allow 1 bit error to ride through minor slips on real
+        // signals. Until then demand an exact match: a tolerant match on noise
+        // produces convincing false frames.
         let syncCandidate = UInt16(bitsLow & 0xFFFF)
         let forwardErrors = popcount(syncCandidate ^ Self.syncWordForward)
         let reverseErrors = popcount(syncCandidate ^ Self.syncWordReverse)
+        let allowedErrors = isLocked ? 1 : 0
 
         let reversed: Bool
-        if forwardErrors <= 1 {
+        if forwardErrors <= allowedErrors {
             reversed = false
-        } else if reverseErrors <= 1 {
+        } else if reverseErrors <= allowedErrors {
             reversed = true
         } else {
             return nil
@@ -337,14 +358,12 @@ struct LTCDecoder {
         let totalMinutes = minutesTens * 10 + minutesUnits
         let totalHours = hoursTens * 10 + hoursUnits
 
-        // Determine frame rate from bit period timing
-        var rate: FrameRate
-        if estimatedBitPeriod > 0 {
-            let frameDuration = estimatedBitPeriod * 80.0 / sampleRate
-            rate = FrameRate.fromFrameDuration(frameDuration)
-        } else {
-            rate = .fps25
-        }
+        // Determine frame rate from bit period timing; timing outside any
+        // real frame rate means the bits are not timecode.
+        guard estimatedBitPeriod > 0 else { return nil }
+        let frameDuration = estimatedBitPeriod * 80.0 / sampleRate
+        guard Self.plausibleFrameDuration.contains(frameDuration) else { return nil }
+        var rate = FrameRate.fromFrameDuration(frameDuration)
 
         // Override with drop-frame if the flag is set
         if dropFrame {
@@ -366,6 +385,13 @@ struct LTCDecoder {
     }
 
     // MARK: - Utilities
+
+    /// True when a bit period (in samples) corresponds to a plausible LTC bit rate.
+    private func isPlausibleBitPeriod(_ samples: Double) -> Bool {
+        guard samples > 0 else { return false }
+        let bitRate = sampleRate / samples
+        return bitRate >= Self.minPlausibleBitRate && bitRate <= Self.maxPlausibleBitRate
+    }
 
     /// Count set bits in a UInt16.
     private func popcount(_ value: UInt16) -> Int {

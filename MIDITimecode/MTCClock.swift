@@ -59,6 +59,9 @@ struct MTCClock {
     static let confirmationToleranceFrames = 0.75
     /// A pending re-anchor older than this is discarded rather than confirmed.
     static let confirmationMaxSpanFrames = 4.0
+    /// Two references closer than this cannot both be real frames; a decoder
+    /// chewing on noise can produce identical values milliseconds apart.
+    static let confirmationMinSpanFrames = 0.5
     /// Gap between a Full Frame and the quarter-frame that follows it.
     static let fullFrameLeadSeconds = 0.002
 
@@ -108,7 +111,8 @@ struct MTCClock {
         // This reference wants a re-anchor. Only act once a second reference
         // continues the same timeline; a lone outlier is dropped.
         let duration = position.rate.frameDuration
-        if let candidate, candidate.rate == position.rate, time > candidate.time,
+        if let candidate, candidate.rate == position.rate,
+           time - candidate.time >= Self.confirmationMinSpanFrames * duration,
            time - candidate.time <= Self.confirmationMaxSpanFrames * duration {
             let predicted = Double(candidate.index) + (time - candidate.time) / duration
             if abs(Double(targetIndex) - predicted) <= Self.confirmationToleranceFrames {

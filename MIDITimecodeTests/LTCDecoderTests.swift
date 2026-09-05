@@ -400,6 +400,58 @@ final class LTCDecoderTests: XCTestCase {
         XCTAssertFalse(decoder.isLocked)
     }
 
+    // MARK: - Noise immunity
+
+    /// A hot line with no timecode on it: a 7.2 kHz whine plus random hash,
+    /// the kind of signal a USB interface delivers when the generator stops.
+    /// The decoder must produce nothing.
+    func testNoFramesFromLineNoise() {
+        let sampleRate = 48000.0
+        var samples = [Float](repeating: 0, count: Int(sampleRate * 20))
+        var seed: UInt64 = 7
+        for i in 0..<samples.count {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            let noise = Float(Double(seed >> 11) / Double(1 << 53) * 2 - 1)
+            let whine = Float(sin(2 * Double.pi * 7230 * Double(i) / sampleRate))
+            samples[i] = 0.15 * (0.8 * whine + 0.6 * noise)
+        }
+        var decoder = LTCDecoder()
+        var decoded: [Timecode] = []
+        samples.withUnsafeBufferPointer { buffer in
+            decoded = decoder.processSamples(buffer, sampleRate: sampleRate)
+        }
+        XCTAssertTrue(decoded.isEmpty, "Noise decoded as \(decoded.map(\.displayString))")
+        XCTAssertFalse(decoder.isLocked)
+    }
+
+    func testNoFramesFromRandomBitsAtLTCRate() {
+        // Random biphase bits at a legal LTC rate: sync words appear by chance
+        // only with bit errors, which must not be accepted before lock.
+        let sampleRate = 48000.0
+        let halfBit = 10
+        var samples: [Float] = []
+        var level: Float = 1
+        var seed: UInt64 = 99
+        for _ in 0..<(30 * 80 * 20) {
+            seed = seed &* 6364136223846793005 &+ 1442695040888963407
+            let one = (seed >> 40) & 1 == 1
+            if one {
+                samples += [Float](repeating: level, count: halfBit); level = -level
+                samples += [Float](repeating: level, count: halfBit); level = -level
+            } else {
+                samples += [Float](repeating: level, count: 2 * halfBit); level = -level
+            }
+        }
+        var decoder = LTCDecoder()
+        var decoded: [Timecode] = []
+        samples.withUnsafeBufferPointer { buffer in
+            decoded = decoder.processSamples(buffer, sampleRate: sampleRate)
+        }
+        // 20 s of random bits contains an exact sync word by chance about
+        // 0.7 times; anything beyond a couple is the tolerant match creeping back.
+        XCTAssertLessThanOrEqual(decoded.count, 2, "Random bits decoded as \(decoded.map(\.displayString))")
+    }
+
     // MARK: - Lock State
 
     func testIsLockedAfterDecode() {

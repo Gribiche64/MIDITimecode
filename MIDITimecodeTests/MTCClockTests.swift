@@ -326,6 +326,17 @@ final class MTCClockTests: XCTestCase {
         XCTAssertEqual(groups(events).first?.timecode, odd)
     }
 
+    func testTwoIdenticalReferencesMillisecondsApartDoNotLock() {
+        var clock = MTCClock()
+        let garbage = Timecode(hours: 21, minutes: 0, seconds: 5, frames: 14, rate: .df2997)
+        clock.reference(garbage, at: 1.000)
+        clock.reference(garbage, at: 1.004)
+        clock.reference(garbage, at: 1.009)
+        XCTAssertEqual(clock.state, .stopped)
+        XCTAssertEqual(clock.jumpCount, 0)
+        XCTAssertTrue(clock.events(until: 2.0).isEmpty)
+    }
+
     func testStopClearsPendingAndState() {
         var clock = MTCClock()
         clock.reference(start, at: 0)
