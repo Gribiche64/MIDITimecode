@@ -87,6 +87,17 @@ xcodebuild test -project MIDITimecode.xcodeproj -scheme MIDITimecode -destinatio
 1. Pick **MTC** in the mode menu and choose the MIDI source.
 2. Press play in the sending application; the display follows.
 
+## CuePilot note
+
+CuePilot 8.5.2 binds its MIDI input by a saved list index and, with no
+device name stored, reads index 1 as the *second* port in the list. With
+one port present it binds nothing and its MIDI indicator flickers. The app
+therefore publishes a silent spare port, "MIDITimecode (spare)", just before
+the real one, so "MIDITimecode LTC" is always second. Both ports keep fixed
+IDs across launches. Quit any other virtual MIDI source (Lockstep, for
+example) before starting CuePilot, since a port bound once is remembered by
+name until CuePilot restarts.
+
 ## Frame rates
 
 The frame rate is measured from the LTC bit period, and the drop-frame flag

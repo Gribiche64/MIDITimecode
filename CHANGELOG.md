@@ -27,6 +27,11 @@
   step response, corrupt-frame rejection, freewheel/stop/relock; decoder sample
   offsets at 25 and 30 fps and dropout recovery.
 
+- A silent spare port, "MIDITimecode (spare)", published ahead of the
+  real one so CuePilot's index-based input selection lands on it.
+- Port carries manufacturer and model; groups start on even frames at
+  24/30/29.97 fps; line noise no longer decodes as timecode.
+
 ### Changed
 - MTC input mode feeds the same generator for pass-through.
 - README rewritten to describe LTC to MTC operation.

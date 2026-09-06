@@ -31,8 +31,15 @@ class VirtualMIDISource: ObservableObject {
         return defaultSourceName
     }
 
+    /// Name of the spare port created ahead of the real one (see `spareEndpoint`).
+    static let spareSourceName = "MIDITimecode (spare)"
+
     private var midiClient: MIDIClientRef = 0
     private var virtualEndpoint: MIDIEndpointRef = 0
+    /// CuePilot 8.5.2 binds its MIDI input by a saved list index that is off
+    /// by one (index 1 with one port present binds nothing). A silent spare
+    /// port created first puts the real port second in every host's list.
+    private var spareEndpoint: MIDIEndpointRef = 0
     private var scheduler: MTCStreamScheduler?
     private var configuration = MTCClock.Configuration()
 
@@ -58,6 +65,14 @@ class VirtualMIDISource: ObservableObject {
             return
         }
 
+        let spareStatus = MIDISourceCreate(midiClient, Self.spareSourceName as CFString, &spareEndpoint)
+        if spareStatus != noErr {
+            logger.error("Failed to create spare source: \(spareStatus)")
+            spareEndpoint = 0
+        } else {
+            applyPersistentUniqueID(to: spareEndpoint, settingKey: Settings.Keys.spareSourceUniqueID)
+        }
+
         status = MIDISourceCreate(
             midiClient,
             Self.sourceName as CFString,
@@ -69,7 +84,7 @@ class VirtualMIDISource: ObservableObject {
             midiClient = 0
             return
         }
-        applyPersistentUniqueID()
+        applyPersistentUniqueID(to: virtualEndpoint, settingKey: Settings.Keys.virtualSourceUniqueID)
         MIDIObjectSetStringProperty(virtualEndpoint, kMIDIPropertyManufacturer, "Rob Sinclair Inc" as CFString)
         MIDIObjectSetStringProperty(virtualEndpoint, kMIDIPropertyModel, "MIDITimecode" as CFString)
 
@@ -97,6 +112,10 @@ class VirtualMIDISource: ObservableObject {
             MIDIEndpointDispose(virtualEndpoint)
             virtualEndpoint = 0
         }
+        if spareEndpoint != 0 {
+            MIDIEndpointDispose(spareEndpoint)
+            spareEndpoint = 0
+        }
         if midiClient != 0 {
             MIDIClientDispose(midiClient)
             midiClient = 0
@@ -122,16 +141,16 @@ class VirtualMIDISource: ObservableObject {
     /// Receivers that remember a port by ID (WebMIDI apps such as CuePilot
     /// derive the port ID from it) otherwise lose the source each time the
     /// app restarts. The ID is chosen once and kept in the app's defaults.
-    private func applyPersistentUniqueID() {
-        var uniqueID = Settings.virtualSourceUniqueID
+    private func applyPersistentUniqueID(to endpoint: MIDIEndpointRef, settingKey: String) {
+        var uniqueID = Settings.uniqueID(forKey: settingKey)
         for attempt in 0..<8 {
             if uniqueID == 0 {
                 uniqueID = Int32.random(in: 1...Int32.max)
             }
-            let status = MIDIObjectSetIntegerProperty(virtualEndpoint, kMIDIPropertyUniqueID, uniqueID)
+            let status = MIDIObjectSetIntegerProperty(endpoint, kMIDIPropertyUniqueID, uniqueID)
             if status == noErr {
-                Settings.virtualSourceUniqueID = uniqueID
-                logger.info("Virtual source unique ID \(uniqueID) (attempt \(attempt + 1))")
+                Settings.setUniqueID(uniqueID, forKey: settingKey)
+                logger.info("Virtual source unique ID \(uniqueID) for \(settingKey) (attempt \(attempt + 1))")
                 return
             }
             if status != kMIDIIDNotUnique {
