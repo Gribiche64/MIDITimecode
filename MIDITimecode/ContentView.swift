@@ -128,10 +128,15 @@ struct ContentView: View {
                 }
             }
         } label: {
-            HStack(spacing: 3) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
+            HStack(spacing: 4) {
+                Image(systemName: engine.virtualMTCEnabled
+                      ? "antenna.radiowaves.left.and.right"
+                      : "antenna.radiowaves.left.and.right.slash")
                     .font(.system(size: 10))
                 Text(mtcOutputLabel)
+                Circle()
+                    .fill(mtcOutputColor)
+                    .frame(width: 6, height: 6)
             }
             .foregroundStyle(mtcOutputColor)
         } primaryAction: {
@@ -143,18 +148,18 @@ struct ContentView: View {
     }
 
     private var mtcOutputLabel: String {
-        guard engine.virtualMTCEnabled else { return "MTC Out" }
+        guard engine.virtualMTCEnabled else { return "MTC Out Off" }
         switch engine.mtcOutputState {
-        case .stopped: return "MTC Out"
-        case .locked: return "MTC Out"
-        case .freewheeling: return "MTC Freewheel"
+        case .stopped: return "MTC Out Waiting"
+        case .locked: return "MTC Out Locked"
+        case .freewheeling: return "MTC Out Freewheel"
         }
     }
 
     private var mtcOutputColor: Color {
-        guard engine.virtualMTCEnabled else { return Color(white: 0.5) }
+        guard engine.virtualMTCEnabled else { return Color(white: 0.45) }
         switch engine.mtcOutputState {
-        case .stopped: return Color(white: 0.7)
+        case .stopped: return Color(white: 0.9)
         case .locked: return .orange
         case .freewheeling: return .yellow
         }

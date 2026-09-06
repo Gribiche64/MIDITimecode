@@ -75,8 +75,8 @@ xcodebuild test -project MIDITimecode.xcodeproj -scheme MIDITimecode -destinatio
 
 1. Launch MIDITimecode and pick **LTC** in the mode menu.
 2. Choose the audio device and the channel carrying timecode.
-3. Turn on **MTC Out**. The label shows the generator state: orange when
-   locked, yellow while freewheeling after signal loss, grey while waiting.
+3. Turn on **MTC Out**. The label reads Off (dim), Waiting (white, port up,
+   no timecode yet), Locked (orange) or Freewheel (yellow, signal lost).
    Click and hold (or right-click) the label to set the freewheel time.
 4. In the receiving application, select the MIDI source
    **"MIDITimecode LTC"** as its MTC input. In CuePilot: Setup → Timecode,
