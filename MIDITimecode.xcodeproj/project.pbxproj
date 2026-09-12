@@ -28,6 +28,9 @@
 		A10019 /* MenuBarContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10019; };
 		A10026 /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10026; };
 		A10027 /* MenuBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10027; };
+		A10038 /* AudioDeviceSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10038; };
+		A10037 /* AudioDeviceMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10037; };
+		A10036 /* AudioDeviceSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10036; };
 		A10030 /* TimecodeMath.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10030; };
 		A10031 /* HostTime.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10031; };
 		A10032 /* MTCClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10032; };
@@ -74,6 +77,9 @@
 		B10019 /* MenuBarContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarContentView.swift; sourceTree = "<group>"; };
 		B10026 /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
 		B10027 /* MenuBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenuBarController.swift; sourceTree = "<group>"; };
+		B10038 /* AudioDeviceSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceSelectionTests.swift; sourceTree = "<group>"; };
+		B10037 /* AudioDeviceMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceMonitor.swift; sourceTree = "<group>"; };
+		B10036 /* AudioDeviceSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioDeviceSelection.swift; sourceTree = "<group>"; };
 		B10030 /* TimecodeMath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimecodeMath.swift; sourceTree = "<group>"; };
 		B10031 /* HostTime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HostTime.swift; sourceTree = "<group>"; };
 		B10032 /* MTCClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MTCClock.swift; sourceTree = "<group>"; };
@@ -135,6 +141,8 @@
 				B10018 /* TimecodeEngine.swift */,
 				B10026 /* Settings.swift */,
 				B10027 /* MenuBarController.swift */,
+				B10037 /* AudioDeviceMonitor.swift */,
+				B10036 /* AudioDeviceSelection.swift */,
 				B10030 /* TimecodeMath.swift */,
 				B10031 /* HostTime.swift */,
 				B10032 /* MTCClock.swift */,
@@ -166,6 +174,7 @@
 				B10023 /* TimecodeTests.swift */,
 				B10024 /* MTCGeneratorTests.swift */,
 				B10025 /* LTCDecoderTests.swift */,
+				B10038 /* AudioDeviceSelectionTests.swift */,
 				B10034 /* TimecodeMathTests.swift */,
 				B10035 /* MTCClockTests.swift */,
 			);
@@ -292,6 +301,8 @@
 				A10019 /* MenuBarContentView.swift in Sources */,
 				A10026 /* Settings.swift in Sources */,
 				A10027 /* MenuBarController.swift in Sources */,
+				A10037 /* AudioDeviceMonitor.swift in Sources */,
+				A10036 /* AudioDeviceSelection.swift in Sources */,
 				A10030 /* TimecodeMath.swift in Sources */,
 				A10031 /* HostTime.swift in Sources */,
 				A10032 /* MTCClock.swift in Sources */,
@@ -309,6 +320,7 @@
 				A10023 /* TimecodeTests.swift in Sources */,
 				A10024 /* MTCGeneratorTests.swift in Sources */,
 				A10025 /* LTCDecoderTests.swift in Sources */,
+				A10038 /* AudioDeviceSelectionTests.swift in Sources */,
 				A10034 /* TimecodeMathTests.swift in Sources */,
 				A10035 /* MTCClockTests.swift in Sources */,
 			);

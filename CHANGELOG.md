@@ -32,6 +32,16 @@
 - Port carries manufacturer and model; groups start on even frames at
   24/30/29.97 fps; line noise no longer decodes as timecode.
 
+- Audio device hot-plug: the chosen interface is remembered by name and
+  re-bound automatically when it is unplugged and returns, after sleep, or
+  after an engine configuration change; a watchdog restarts the engine if
+  buffers stop; the status bar shows "No Device" while it is absent.
+- Virtual MIDI ports are recreated if the MIDI server drops them.
+- One engine per process: SwiftUI could build the app's state object twice
+  at launch, briefly creating a duplicate audio tap and MIDI port.
+
+- Minimum window width raised so the settings bar never wraps.
+
 ### Changed
 - MTC input mode feeds the same generator for pass-through.
 - README rewritten to describe LTC to MTC operation.

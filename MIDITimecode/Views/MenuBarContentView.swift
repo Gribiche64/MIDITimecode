@@ -45,7 +45,10 @@ struct MenuBarContentView: View {
     private var statusText: some View {
         Group {
             if engine.inputMode == .ltc {
-                if engine.isLocked {
+                if engine.audioManager.deviceMissing {
+                    Text("No Device")
+                        .foregroundStyle(.red)
+                } else if engine.isLocked {
                     Text(engine.frameRate + (engine.isReversing ? " REV" : ""))
                         .foregroundStyle(.green)
                 } else if engine.signalLevel > 0.01 {

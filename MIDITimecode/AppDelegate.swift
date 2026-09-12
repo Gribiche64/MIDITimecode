@@ -1,9 +1,15 @@
 import AppKit
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    private let minWidth: CGFloat = 540
-    private let minHeight: CGFloat = 190
-    private let aspectRatio: CGFloat = 540.0 / 190.0
+    /// Wide enough for the full settings bar on one line at any state
+    /// (LTC · status · Audio: name · Ch n | MTC Freewheel · Color: Rainbow · pin).
+    static let minWidth: CGFloat = 820
+    static let aspectRatio: CGFloat = 540.0 / 190.0
+    static var minHeight: CGFloat { (minWidth / aspectRatio).rounded() }
+
+    private let minWidth = AppDelegate.minWidth
+    private let minHeight = AppDelegate.minHeight
+    private let aspectRatio = AppDelegate.aspectRatio
 
     private var menuBarController: MenuBarController?
 

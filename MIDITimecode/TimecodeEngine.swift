@@ -1,6 +1,9 @@
 import AppKit
 import Combine
 import Foundation
+import os.log
+
+private let engineLogger = Logger(subsystem: "Rob-Sinclair-Inc.MIDITimecode", category: "TimecodeEngine")
 
 enum InputMode: String, CaseIterable, Identifiable {
     case mtc = "MTC"
@@ -9,6 +12,9 @@ enum InputMode: String, CaseIterable, Identifiable {
 }
 
 class TimecodeEngine: ObservableObject {
+    /// The one engine for the process. See `MIDITimecodeApp`.
+    static let shared = TimecodeEngine()
+
     // MARK: - Published state
 
     @Published var inputMode: InputMode {
@@ -71,6 +77,7 @@ class TimecodeEngine: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     init() {
+        engineLogger.info("TimecodeEngine created")
         // Load persisted preferences
         self.inputMode = Settings.inputMode
         self.tubeColor = Settings.tubeColor
@@ -143,23 +150,9 @@ class TimecodeEngine: ObservableObject {
             .sink { Settings.midiDeviceName = $0 }
             .store(in: &cancellables)
 
-        // Same for audio
-        audioManager.$availableDevices
-            .receive(on: RunLoop.main)
-            .sink { [weak self] devices in
-                guard let self else { return }
-                if let savedName = Settings.audioDeviceName,
-                   let match = devices.first(where: { $0.name == savedName }),
-                   self.audioManager.selectedDevice?.name != savedName {
-                    self.audioManager.selectedDevice = match
-                }
-                // If we're in LTC mode and have a device but aren't running
-                // (initial start() returned early before devices appeared), start now.
-                if self.inputMode == .ltc && self.audioManager.selectedDevice != nil {
-                    self.audioManager.start()
-                }
-            }
-            .store(in: &cancellables)
+        // Audio: the manager remembers the device by name and re-binds it
+        // itself whenever the device list changes (hot-plug, wake, power cycle).
+        audioManager.preferredDeviceName = Settings.audioDeviceName
 
         audioManager.$selectedDevice
             .compactMap { $0?.name }
@@ -299,6 +292,10 @@ class TimecodeEngine: ObservableObject {
     private func applyFreewheel() {
         let frames = Int((freewheelSeconds / Self.freewheelReferenceRate.frameDuration).rounded())
         virtualSource.freewheelFrames = max(1, frames)
+    }
+
+    deinit {
+        engineLogger.error("TimecodeEngine deallocated")
     }
 
     // MARK: - Window

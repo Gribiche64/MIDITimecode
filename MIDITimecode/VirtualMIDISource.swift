@@ -57,36 +57,19 @@ class VirtualMIDISource: ObservableObject {
 
         var status = MIDIClientCreateWithBlock(
             "MIDITimecodeVirtualClient" as CFString,
-            &midiClient,
-            nil
-        )
+            &midiClient
+        ) { [weak self] notification in
+            // If the MIDI server restarts, virtual endpoints vanish; put them back.
+            guard notification.pointee.messageID == .msgSetupChanged else { return }
+            DispatchQueue.main.async { self?.recreateEndpointsIfGone() }
+        }
         guard status == noErr else {
             logger.error("Failed to create MIDI client: \(status)")
             return
         }
 
-        let spareStatus = MIDISourceCreate(midiClient, Self.spareSourceName as CFString, &spareEndpoint)
-        if spareStatus != noErr {
-            logger.error("Failed to create spare source: \(spareStatus)")
-            spareEndpoint = 0
-        } else {
-            applyPersistentUniqueID(to: spareEndpoint, settingKey: Settings.Keys.spareSourceUniqueID)
-        }
-
-        status = MIDISourceCreate(
-            midiClient,
-            Self.sourceName as CFString,
-            &virtualEndpoint
-        )
-        guard status == noErr else {
-            logger.error("Failed to create virtual source: \(status)")
-            MIDIClientDispose(midiClient)
-            midiClient = 0
-            return
-        }
-        applyPersistentUniqueID(to: virtualEndpoint, settingKey: Settings.Keys.virtualSourceUniqueID)
-        MIDIObjectSetStringProperty(virtualEndpoint, kMIDIPropertyManufacturer, "Rob Sinclair Inc" as CFString)
-        MIDIObjectSetStringProperty(virtualEndpoint, kMIDIPropertyModel, "MIDITimecode" as CFString)
+        createEndpoints()
+        guard virtualEndpoint != 0 else { return }
 
         let scheduler = MTCStreamScheduler(
             configuration: configuration,
@@ -102,6 +85,45 @@ class VirtualMIDISource: ObservableObject {
 
         isActive = true
         logger.info("Virtual source '\(Self.sourceName)' active")
+    }
+
+    private func createEndpoints() {
+        var status: OSStatus
+        let spareStatus = MIDISourceCreate(midiClient, Self.spareSourceName as CFString, &spareEndpoint)
+        if spareStatus != noErr {
+            logger.error("Failed to create spare source: \(spareStatus)")
+            spareEndpoint = 0
+        } else {
+            applyPersistentUniqueID(to: spareEndpoint, settingKey: Settings.Keys.spareSourceUniqueID)
+        }
+
+        status = MIDISourceCreate(
+            midiClient,
+            Self.sourceName as CFString,
+            &virtualEndpoint
+        )
+        guard status == noErr else {
+            logger.error("Failed to create virtual source: \(status)")
+            virtualEndpoint = 0
+            return
+        }
+        applyPersistentUniqueID(to: virtualEndpoint, settingKey: Settings.Keys.virtualSourceUniqueID)
+        MIDIObjectSetStringProperty(virtualEndpoint, kMIDIPropertyManufacturer, "Rob Sinclair Inc" as CFString)
+        MIDIObjectSetStringProperty(virtualEndpoint, kMIDIPropertyModel, "MIDITimecode" as CFString)
+    }
+
+    /// After a MIDI setup change, check our endpoints still exist by unique ID
+    /// and recreate them if the server dropped them.
+    private func recreateEndpointsIfGone() {
+        guard isActive, virtualEndpoint != 0 else { return }
+        var object = MIDIObjectRef()
+        var type = MIDIObjectType.other
+        let found = MIDIObjectFindByUniqueID(Settings.uniqueID(forKey: Settings.Keys.virtualSourceUniqueID), &object, &type)
+        guard found != noErr else { return }
+        logger.warning("Virtual source disappeared from the MIDI setup; recreating")
+        virtualEndpoint = 0
+        spareEndpoint = 0
+        createEndpoints()
     }
 
     func stop() {

@@ -1,7 +1,9 @@
+import AppKit
 import AVFoundation
 import Combine
 import CoreAudio
 import Foundation
+import os
 import os.log
 
 private let logger = Logger(subsystem: "Rob-Sinclair-Inc.MIDITimecode", category: "AudioManager")
@@ -10,13 +12,27 @@ class AudioManager: ObservableObject {
     @Published var availableDevices: [AudioDevice] = []
     @Published var selectedDevice: AudioDevice? {
         didSet {
-            if isRunning { restart() }
+            if let device = selectedDevice {
+                deviceMissing = false
+                if preferredDeviceName != device.name {
+                    preferredDeviceName = device.name   // user's pick; reconciles to the same device
+                    return
+                }
+            }
+            if wantsRunning { restartEngine() }
         }
     }
     @Published var selectedChannel: Int = 0 {
         didSet {
-            if isRunning { restart() }
+            if isRunning { restartEngine() }
         }
+    }
+    /// True while the remembered device is not present on the system.
+    @Published var deviceMissing: Bool = false
+
+    /// Name of the device the user wants, kept even while it is unplugged.
+    var preferredDeviceName: String? {
+        didSet { if preferredDeviceName != oldValue { reconcileSelection() } }
     }
     @Published var latestTimecode: Timecode = .zero
     @Published var isLocked: Bool = false
@@ -39,28 +55,124 @@ class AudioManager: ObservableObject {
     private var warnedMissingHostTime = false
     private var decoder = LTCDecoder()
     private var isRunning = false
+    /// Set by `start()`, cleared by `stop()`: the engine should be running
+    /// whenever the device is present, and be brought back when it returns.
+    private var wantsRunning = false
+    private var deviceMonitor: AudioDeviceMonitor?
+    private var observers: [NSObjectProtocol] = []
+    private var watchdog: Timer?
+    private let lastBufferTime = OSAllocatedUnfairLock(initialState: 0.0)
+
+    /// Seconds without an audio buffer before the engine is assumed dead.
+    static let bufferTimeoutSeconds = 3.0
 
     init() {
         scanDevices()
+        deviceMonitor = AudioDeviceMonitor { [weak self] in
+            logger.info("Audio device list changed")
+            self?.scanDevices()
+        }
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            logger.info("System woke; restarting audio if wanted")
+            self?.scanDevices()
+            self?.restartEngineIfWanted()
+        })
+        observers.append(NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self, let engine = note.object as? AVAudioEngine, engine === self.engine else { return }
+            // Logged only. Some devices post this repeatedly while running
+            // normally; restarting on it resets the decoder each time. If the
+            // engine really stopped, buffers stop and the watchdog restarts it.
+            logger.info("Audio engine configuration changed (running: \(engine.isRunning))")
+        })
+        logger.info("AudioManager created")
+        watchdog = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            self?.checkBuffersArriving()
+        }
     }
 
     func scanDevices() {
         let devices = AudioDevice.availableInputDevices()
         logger.info("Scanned audio devices: \(devices.map { "\($0.name) (\($0.inputChannelCount)ch, id=\($0.deviceID))" }.joined(separator: ", "))")
-        DispatchQueue.main.async {
-            self.availableDevices = devices
-            if self.selectedDevice == nil, let first = devices.first {
-                self.selectedDevice = first
-            }
+        DispatchQueue.main.async { [weak self] in
+            self?.availableDevices = devices
+            self?.reconcileSelection()
         }
     }
 
+    /// Apply the remembered device name to the current device list.
+    private func reconcileSelection() {
+        switch AudioDeviceSelection.choose(preferred: preferredDeviceName, current: selectedDevice, available: availableDevices) {
+        case .select(let device):
+            deviceMissing = false
+            if selectedDevice?.deviceID != device.deviceID || selectedDevice?.name != device.name {
+                selectedDevice = device   // didSet restarts the engine if wanted
+            } else if wantsRunning, !isRunning {
+                restartEngineIfWanted()
+            }
+        case .waitFor(let name):
+            if !deviceMissing { logger.warning("Audio device '\(name)' not present; waiting for it") }
+            deviceMissing = true
+            if isRunning { stopEngine() }
+        case .none:
+            deviceMissing = false
+            if isRunning { stopEngine() }
+        }
+    }
+
+    /// Run LTC decoding on the selected device, now and whenever it comes back.
     func start() {
+        wantsRunning = true
+        if isRunning { return }
+        reconcileSelection()
+        if !isRunning, !deviceMissing { startEngine() }
+    }
+
+    func stop() {
+        wantsRunning = false
+        stopEngine()
+    }
+
+    private var lastRestart = 0.0
+    /// Shortest interval between automatic restarts, so a flapping device
+    /// cannot make the engine thrash.
+    static let minimumRestartInterval = 1.0
+
+    private func restartEngineIfWanted() {
+        guard wantsRunning else { return }
+        let now = HostTime.now()
+        guard now - lastRestart >= Self.minimumRestartInterval else {
+            logger.warning("Restart requested again within \(Self.minimumRestartInterval) s; skipping")
+            return
+        }
+        lastRestart = now
+        restartEngine()
+    }
+
+    private func checkBuffersArriving() {
+        guard isRunning else { return }
+        let last = lastBufferTime.withLock { $0 }
+        guard last > 0, HostTime.now() - last > Self.bufferTimeoutSeconds else { return }
+        logger.warning("No audio buffers for \(Self.bufferTimeoutSeconds) s; restarting engine")
+        scanDevices()
+        restartEngine()
+    }
+
+    private func startEngine() {
         guard !isRunning else { return }
         guard let device = selectedDevice else {
             logger.warning("Cannot start: no device selected")
             return
         }
+        guard availableDevices.contains(where: { $0.deviceID == device.deviceID }) else {
+            logger.warning("Cannot start: device '\(device.name)' is not present")
+            deviceMissing = true
+            return
+        }
+        lastBufferTime.withLock { $0 = 0 }
 
         decoder.reset()
 
@@ -150,25 +262,27 @@ class AudioManager: ObservableObject {
         }
     }
 
-    func stop() {
+    private func stopEngine() {
         engine?.inputNode.removeTap(onBus: 0)
         engine?.stop()
         engine = nil
         isRunning = false
-        DispatchQueue.main.async {
-            self.isLocked = false
-            self.signalLevel = 0.0
+        decoder.reset()
+        DispatchQueue.main.async { [weak self] in
+            self?.isLocked = false
+            self?.signalLevel = 0.0
         }
     }
 
     // MARK: - Private
 
-    private func restart() {
-        stop()
-        start()
+    private func restartEngine() {
+        stopEngine()
+        startEngine()
     }
 
     private func processAudioBuffer(_ buffer: AVAudioPCMBuffer, at when: AVAudioTime) {
+        lastBufferTime.withLock { $0 = HostTime.now() }
         guard let channelData = buffer.floatChannelData else { return }
         let frameCount = Int(buffer.frameLength)
         let channelCount = Int(buffer.format.channelCount)
@@ -220,6 +334,15 @@ class AudioManager: ObservableObject {
     }
 
     deinit {
-        stop()
+        // The engine's manager lives as long as the app; reaching here means
+        // an instance was created and dropped, which is worth knowing about.
+        logger.error("AudioManager deallocated")
+        watchdog?.invalidate()
+        for observer in observers {
+            NotificationCenter.default.removeObserver(observer)
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+        engine?.inputNode.removeTap(onBus: 0)
+        engine?.stop()
     }
 }

@@ -3,7 +3,9 @@ import SwiftUI
 @main
 struct MIDITimecodeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
-    @StateObject private var engine = TimecodeEngine()
+    // SwiftUI can evaluate an App's state-object initialiser more than once at
+    // launch; a shared instance guarantees one engine, one audio tap, one port.
+    @StateObject private var engine = TimecodeEngine.shared
 
     var body: some Scene {
         WindowGroup {
@@ -16,6 +18,6 @@ struct MIDITimecodeApp: App {
                 }
         }
         .windowStyle(.hiddenTitleBar)
-        .defaultSize(width: 540, height: 190)
+        .defaultSize(width: AppDelegate.minWidth, height: AppDelegate.minHeight)
     }
 }

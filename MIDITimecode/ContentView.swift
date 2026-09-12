@@ -59,6 +59,8 @@ struct ContentView: View {
                         .overlay(Color(white: 0.35))
 
                     Text("Color:")
+                .lineLimit(1)
+                .fixedSize()
                         .foregroundStyle(Color(white: 0.85))
                         .padding(.leading, 8)
 
@@ -76,6 +78,8 @@ struct ContentView: View {
                     } label: {
                         HStack(spacing: 4) {
                             Text(engine.tubeColor.rawValue.capitalized)
+                                .lineLimit(1)
+                                .fixedSize()
                             Image(systemName: "chevron.up.chevron.down")
                                 .font(.system(size: 9))
                                 .foregroundStyle(Color(white: 0.6))
@@ -134,6 +138,8 @@ struct ContentView: View {
                       : "antenna.radiowaves.left.and.right.slash")
                     .font(.system(size: 10))
                 Text(mtcOutputLabel)
+                    .lineLimit(1)
+                    .fixedSize()
                 Circle()
                     .fill(mtcOutputColor)
                     .frame(width: 6, height: 6)
@@ -148,11 +154,11 @@ struct ContentView: View {
     }
 
     private var mtcOutputLabel: String {
-        guard engine.virtualMTCEnabled else { return "MTC Out Off" }
+        guard engine.virtualMTCEnabled else { return "MTC Off" }
         switch engine.mtcOutputState {
-        case .stopped: return "MTC Out Waiting"
-        case .locked: return "MTC Out Locked"
-        case .freewheeling: return "MTC Out Freewheel"
+        case .stopped: return "MTC Waiting"
+        case .locked: return "MTC Locked"
+        case .freewheeling: return "MTC Freewheel"
         }
     }
 
@@ -197,6 +203,7 @@ struct ContentView: View {
             HStack(spacing: 4) {
                 Text(engine.inputMode.rawValue)
                     .fontWeight(.medium)
+                    .fixedSize()
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9))
                     .foregroundStyle(Color(white: 0.6))
@@ -217,14 +224,21 @@ struct ContentView: View {
                         .fill(signalColor)
                         .frame(width: 6, height: 6)
 
-                    if engine.isLocked {
+                    if engine.audioManager.deviceMissing {
+                        Text("No Device")
+                            .fixedSize()
+                            .foregroundStyle(Color.red)
+                    } else if engine.isLocked {
                         Text(engine.frameRate + (engine.isReversing ? " REV" : ""))
+                            .fixedSize()
                             .foregroundStyle(Color.green)
                     } else if engine.signalLevel > 0.01 {
                         Text("Locking...")
+                            .fixedSize()
                             .foregroundStyle(Color.yellow)
                     } else {
                         Text("No Signal")
+                            .fixedSize()
                             .foregroundStyle(Color(white: 0.5))
                     }
                 }
@@ -236,6 +250,7 @@ struct ContentView: View {
     }
 
     private var signalColor: Color {
+        if engine.audioManager.deviceMissing { return .red }
         if engine.isLocked { return .green }
         if engine.signalLevel > 0.01 { return .yellow }
         return Color(white: 0.4)
@@ -256,6 +271,8 @@ struct ContentView: View {
     private var mtcSourcePicker: some View {
         HStack(spacing: 0) {
             Text("MIDI:")
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(Color(white: 0.85))
                 .padding(.leading, 8)
 
@@ -282,6 +299,7 @@ struct ContentView: View {
                 HStack(spacing: 4) {
                     Text(engine.midiManager.selectedDevice?.name ?? "None")
                         .lineLimit(1)
+                        .frame(maxWidth: 220, alignment: .leading)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 9))
                         .foregroundStyle(Color(white: 0.6))
@@ -296,6 +314,8 @@ struct ContentView: View {
     private var ltcSourcePicker: some View {
         HStack(spacing: 0) {
             Text("Audio:")
+                .lineLimit(1)
+                .fixedSize()
                 .foregroundStyle(Color(white: 0.85))
                 .padding(.leading, 8)
 
@@ -322,6 +342,7 @@ struct ContentView: View {
                 HStack(spacing: 4) {
                     Text(engine.audioManager.selectedDevice?.name ?? "None")
                         .lineLimit(1)
+                        .frame(maxWidth: 220, alignment: .leading)
                     Image(systemName: "chevron.up.chevron.down")
                         .font(.system(size: 9))
                         .foregroundStyle(Color(white: 0.6))
@@ -351,6 +372,8 @@ struct ContentView: View {
                 } label: {
                     HStack(spacing: 4) {
                         Text("Ch \(engine.audioManager.selectedChannel + 1)")
+                            .lineLimit(1)
+                            .fixedSize()
                         Image(systemName: "chevron.up.chevron.down")
                             .font(.system(size: 9))
                             .foregroundStyle(Color(white: 0.6))
